@@ -59,15 +59,15 @@ const Index = () => {
               🎯 Your Local E-Commerce Platform
             </div>
             
-            <h1 className="text-5xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary to-secondary animate-in fade-in slide-in-from-bottom-4 duration-1000">
+            <h1 className="text-5xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary to-secondary">
               Welcome to Live MART
             </h1>
             
-            <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-5 duration-1000 delay-150">
+            <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
               Connect customers, retailers, and wholesalers in one powerful marketplace
             </p>
 
-            <div className="flex flex-wrap gap-4 justify-center animate-in fade-in slide-in-from-bottom-6 duration-1000 delay-300">
+            <div className="flex flex-wrap gap-4 justify-center">
               <div className="flex items-center gap-2 text-sm">
                 <div className="h-2 w-2 rounded-full bg-accent" />
                 <span className="text-muted-foreground">Local Products</span>
@@ -95,14 +95,8 @@ const Index = () => {
         </div>
 
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3 max-w-6xl mx-auto">
-          {roles.map((role, index) => (
-            <div
-              key={role.title}
-              className="animate-in fade-in slide-in-from-bottom-8 duration-700"
-              style={{ animationDelay: `${index * 150}ms` }}
-            >
-              <RoleCard {...role} />
-            </div>
+          {roles.map((role) => (
+            <RoleCard key={role.title} {...role} />
           ))}
         </div>
       </section>
