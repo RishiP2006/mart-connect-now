@@ -13,7 +13,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [profile, setProfile] = useState<any>(null);
-
+  const [checkedSession, setCheckedSession] = useState(false);
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -25,14 +25,17 @@ export default function Dashboard() {
     // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      setCheckedSession(true);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
+    if (!checkedSession) return;
+
     if (!session) {
-      navigate("/auth");
+      navigate("/auth", { replace: true });
       return;
     }
 
@@ -71,7 +74,7 @@ export default function Dashboard() {
     };
 
     fetchUserData();
-  }, [session, navigate]);
+  }, [checkedSession, session]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
