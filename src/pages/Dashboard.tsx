@@ -117,14 +117,28 @@ export default function Dashboard() {
               <RoleIcon className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">Live MART</h1>
+              <h1 className="text-xl font-bold cursor-pointer" onClick={() => navigate('/dashboard')}>Live MART</h1>
               <p className="text-xs text-muted-foreground capitalize">{userRole} Dashboard</p>
             </div>
           </div>
-          <Button onClick={handleLogout} variant="outline" size="sm">
-            <LogOut className="mr-2 h-4 w-4" />
-            Logout
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={() => navigate('/products')} variant="ghost" size="sm">
+              Browse Products
+            </Button>
+            {(userRole === 'retailer' || userRole === 'wholesaler') && (
+              <Button onClick={() => navigate('/seller/products')} variant="ghost" size="sm">
+                My Products
+              </Button>
+            )}
+            <Button onClick={() => navigate('/profile')} variant="ghost" size="sm">
+              <User className="mr-2 h-4 w-4" />
+              Profile
+            </Button>
+            <Button onClick={handleLogout} variant="outline" size="sm">
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </div>
         </div>
       </nav>
 
@@ -147,16 +161,16 @@ export default function Dashboard() {
                   <CardDescription>Explore local products</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button className="w-full">View Catalog</Button>
+                  <Button className="w-full" onClick={() => navigate('/products')}>View Catalog</Button>
                 </CardContent>
               </Card>
               <Card className="hover:shadow-[var(--shadow-hover)] transition-all">
                 <CardHeader>
-                  <CardTitle>My Orders</CardTitle>
-                  <CardDescription>Track your purchases</CardDescription>
+                  <CardTitle>Shopping Cart</CardTitle>
+                  <CardDescription>Review your cart</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button variant="outline" className="w-full">View Orders</Button>
+                  <Button variant="outline" className="w-full" onClick={() => navigate('/cart')}>View Cart</Button>
                 </CardContent>
               </Card>
             </>
@@ -170,16 +184,16 @@ export default function Dashboard() {
                   <CardDescription>Manage your inventory</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button className="w-full">Manage Products</Button>
+                  <Button className="w-full" onClick={() => navigate('/seller/products')}>Manage Products</Button>
                 </CardContent>
               </Card>
               <Card className="hover:shadow-[var(--shadow-hover)] transition-all">
                 <CardHeader>
-                  <CardTitle>Orders</CardTitle>
-                  <CardDescription>Process customer orders</CardDescription>
+                  <CardTitle>Browse Products</CardTitle>
+                  <CardDescription>Shop from other sellers</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button variant="outline" className="w-full">View Orders</Button>
+                  <Button variant="outline" className="w-full" onClick={() => navigate('/products')}>View Products</Button>
                 </CardContent>
               </Card>
             </>
@@ -191,7 +205,7 @@ export default function Dashboard() {
               <CardDescription>Update your information</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full">Edit Profile</Button>
+              <Button variant="outline" className="w-full" onClick={() => navigate('/profile')}>Edit Profile</Button>
             </CardContent>
           </Card>
         </div>
