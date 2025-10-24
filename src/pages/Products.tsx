@@ -5,15 +5,36 @@ import { ProductCard } from '@/components/ProductCard';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Search, MapPin, Navigation } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+interface ProductWithLocation {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  image_url: string | null;
+  stock_quantity: number;
+  seller_id: string;
+  category_id: string | null;
+  created_at: string;
+  distance?: number;
+  seller_name?: string;
+  seller_location?: string;
+  profiles?: any;
+}
 
 const Products = () => {
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<ProductWithLocation[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchUserRole();
@@ -38,22 +59,104 @@ const Products = () => {
     setCategories(data || []);
   };
 
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Earth's radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const getUserLocation = () => {
+    setLocationLoading(true);
+    if (!navigator.geolocation) {
+      toast({
+        title: "Location not supported",
+        description: "Your browser doesn't support geolocation",
+        variant: "destructive",
+      });
+      setLocationLoading(false);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+        setLocationLoading(false);
+        toast({
+          title: "Location enabled",
+          description: "Showing products near you",
+        });
+      },
+      (error) => {
+        setLocationLoading(false);
+        toast({
+          title: "Location access denied",
+          description: "Please enable location to see nearby products",
+          variant: "destructive",
+        });
+      }
+    );
+  };
+
   const fetchProducts = async () => {
     setLoading(true);
-    let query = supabase.from('products').select('*').order('created_at', { ascending: false });
+    let query = supabase
+      .from('products')
+      .select(`
+        *,
+        profiles:seller_id (
+          full_name,
+          location_lat,
+          location_lng,
+          address
+        )
+      `)
+      .order('created_at', { ascending: false });
 
     if (selectedCategory !== 'all') {
       query = query.eq('category_id', selectedCategory);
     }
 
     const { data } = await query;
-    setProducts(data || []);
+    
+    let productsWithLocation = (data || []).map((product: any) => ({
+      ...product,
+      seller_name: product.profiles?.full_name,
+      seller_location: product.profiles?.address,
+      distance: userLocation && product.profiles?.location_lat && product.profiles?.location_lng
+        ? calculateDistance(
+            userLocation.lat,
+            userLocation.lng,
+            Number(product.profiles.location_lat),
+            Number(product.profiles.location_lng)
+          )
+        : undefined,
+    }));
+
+    // Sort by distance if user location is available
+    if (userLocation) {
+      productsWithLocation = productsWithLocation.sort((a, b) => {
+        if (a.distance === undefined) return 1;
+        if (b.distance === undefined) return -1;
+        return a.distance - b.distance;
+      });
+    }
+
+    setProducts(productsWithLocation);
     setLoading(false);
   };
 
   useEffect(() => {
     fetchProducts();
-  }, [selectedCategory]);
+  }, [selectedCategory, userLocation]);
 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -67,6 +170,27 @@ const Products = () => {
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">Browse Products</h1>
           <p className="text-muted-foreground">Discover products from local retailers and wholesalers</p>
+          
+          <div className="mt-4">
+            <Button 
+              onClick={getUserLocation} 
+              disabled={locationLoading}
+              variant={userLocation ? "secondary" : "default"}
+              className="gap-2"
+            >
+              {userLocation ? (
+                <>
+                  <MapPin className="h-4 w-4" />
+                  Location enabled
+                </>
+              ) : (
+                <>
+                  <Navigation className="h-4 w-4" />
+                  {locationLoading ? "Getting location..." : "Enable location for nearby products"}
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 mb-8">
@@ -111,7 +235,13 @@ const Products = () => {
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredProducts.map((product) => (
-              <ProductCard key={product.id} {...product} />
+              <ProductCard 
+                key={product.id} 
+                {...product}
+                distance={product.distance}
+                sellerName={product.seller_name}
+                sellerLocation={product.seller_location}
+              />
             ))}
           </div>
         )}
