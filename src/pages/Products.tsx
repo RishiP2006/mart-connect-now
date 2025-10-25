@@ -34,6 +34,8 @@ const Products = () => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [cityName, setCityName] = useState('');
+  const [currentCity, setCurrentCity] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -71,58 +73,52 @@ const Products = () => {
     return R * c;
   };
 
-  const getUserLocation = () => {
-    setLocationLoading(true);
-    if (!navigator.geolocation) {
+  const searchCityLocation = async () => {
+    if (!cityName.trim()) {
       toast({
-        title: "Location not supported",
-        description: "Your browser doesn't support geolocation",
+        title: "Enter a city name",
+        description: "Please enter a city name to search",
         variant: "destructive",
       });
-      setLocationLoading(false);
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        });
-        setLocationLoading(false);
+    setLocationLoading(true);
+    
+    try {
+      // Use Nominatim geocoding API (OpenStreetMap)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(cityName)}&format=json&limit=1`
+      );
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        const location = {
+          lat: parseFloat(data[0].lat),
+          lng: parseFloat(data[0].lon),
+        };
+        setUserLocation(location);
+        setCurrentCity(data[0].display_name);
         toast({
-          title: "Location enabled",
-          description: "Showing products near you",
+          title: "Location found",
+          description: `Showing products near ${data[0].display_name}`,
         });
-      },
-      (error) => {
-        setLocationLoading(false);
-        let errorMessage = "Please enable location permissions in your browser settings";
-        
-        switch(error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = "Click the location icon in your browser's address bar to allow access";
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = "Location information is unavailable";
-            break;
-          case error.TIMEOUT:
-            errorMessage = "Location request timed out. Please try again";
-            break;
-        }
-        
+      } else {
         toast({
-          title: "Location access needed",
-          description: errorMessage,
+          title: "City not found",
+          description: "Please try a different city name",
           variant: "destructive",
         });
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
       }
-    );
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to find city location",
+        variant: "destructive",
+      });
+    } finally {
+      setLocationLoading(false);
+    }
   };
 
   const fetchProducts = async () => {
@@ -191,24 +187,28 @@ const Products = () => {
           <p className="text-muted-foreground">Discover products from local retailers and wholesalers</p>
           
           <div className="mt-4">
-            <Button 
-              onClick={getUserLocation} 
-              disabled={locationLoading}
-              variant={userLocation ? "secondary" : "default"}
-              className="gap-2"
-            >
-              {userLocation ? (
-                <>
-                  <MapPin className="h-4 w-4" />
-                  Location enabled
-                </>
-              ) : (
-                <>
-                  <Navigation className="h-4 w-4" />
-                  {locationLoading ? "Getting location..." : "Enable location for nearby products"}
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2 max-w-md">
+              <Input
+                placeholder="Enter your city name..."
+                value={cityName}
+                onChange={(e) => setCityName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && searchCityLocation()}
+                className="flex-1"
+              />
+              <Button 
+                onClick={searchCityLocation} 
+                disabled={locationLoading}
+                className="gap-2"
+              >
+                <MapPin className="h-4 w-4" />
+                {locationLoading ? "Searching..." : "Search"}
+              </Button>
+            </div>
+            {currentCity && (
+              <p className="text-sm text-muted-foreground mt-2">
+                Showing products near: <span className="font-medium">{currentCity}</span>
+              </p>
+            )}
           </div>
         </div>
 
