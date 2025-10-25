@@ -127,7 +127,7 @@ const Products = () => {
       .from('products')
       .select(`
         *,
-        profiles:seller_id (
+        profiles!products_seller_id_fkey (
           full_name,
           location_lat,
           location_lng,
