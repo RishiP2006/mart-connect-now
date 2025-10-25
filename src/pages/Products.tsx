@@ -123,50 +123,72 @@ const Products = () => {
 
   const fetchProducts = async () => {
     setLoading(true);
-    let query = supabase
-      .from('products')
-      .select(`
-        *,
-        profiles!products_seller_id_fkey (
-          full_name,
-          location_lat,
-          location_lng,
-          address
-        )
-      `)
-      .order('created_at', { ascending: false });
+    try {
+      // 1) Fetch products (optionally by category)
+      let productsQuery = supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (selectedCategory !== 'all') {
-      query = query.eq('category_id', selectedCategory);
-    }
+      if (selectedCategory !== 'all') {
+        productsQuery = productsQuery.eq('category_id', selectedCategory);
+      }
 
-    const { data } = await query;
-    
-    let productsWithLocation = (data || []).map((product: any) => ({
-      ...product,
-      seller_name: product.profiles?.full_name,
-      seller_location: product.profiles?.address,
-      distance: userLocation && product.profiles?.location_lat && product.profiles?.location_lng
-        ? calculateDistance(
-            userLocation.lat,
-            userLocation.lng,
-            Number(product.profiles.location_lat),
-            Number(product.profiles.location_lng)
-          )
-        : undefined,
-    }));
+      const { data: productsData, error: productsError } = await productsQuery;
 
-    // Sort by distance if user location is available
-    if (userLocation) {
-      productsWithLocation = productsWithLocation.sort((a, b) => {
-        if (a.distance === undefined) return 1;
-        if (b.distance === undefined) return -1;
-        return a.distance - b.distance;
+      if (productsError) {
+        console.error('Error fetching products:', productsError);
+        setProducts([]);
+        return;
+      }
+
+      const baseProducts = productsData || [];
+
+      // 2) Fetch seller profiles for these products and merge client-side
+      const sellerIds = Array.from(new Set(baseProducts.map((p: any) => p.seller_id).filter(Boolean)));
+
+      let profileMap = new Map<string, any>();
+      if (sellerIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name, location_lat, location_lng, address')
+          .in('id', sellerIds);
+
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+        } else {
+          profileMap = new Map((profilesData || []).map((pr: any) => [pr.id, pr]));
+        }
+      }
+
+      let productsWithLocation = baseProducts.map((product: any) => {
+        const profile = profileMap.get(product.seller_id);
+        const lat = profile?.location_lat ? Number(profile.location_lat) : undefined;
+        const lng = profile?.location_lng ? Number(profile.location_lng) : undefined;
+
+        return {
+          ...product,
+          seller_name: profile?.full_name,
+          seller_location: profile?.address,
+          distance:
+            userLocation && lat !== undefined && lng !== undefined
+              ? calculateDistance(userLocation.lat, userLocation.lng, lat, lng)
+              : undefined,
+        } as ProductWithLocation;
       });
-    }
 
-    setProducts(productsWithLocation);
-    setLoading(false);
+      if (userLocation) {
+        productsWithLocation = productsWithLocation.sort((a, b) => {
+          if (a.distance === undefined) return 1;
+          if (b.distance === undefined) return -1;
+          return (a.distance as number) - (b.distance as number);
+        });
+      }
+
+      setProducts(productsWithLocation);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
