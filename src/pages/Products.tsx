@@ -97,11 +97,30 @@ const Products = () => {
       },
       (error) => {
         setLocationLoading(false);
+        let errorMessage = "Please enable location permissions in your browser settings";
+        
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = "Click the location icon in your browser's address bar to allow access";
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = "Location information is unavailable";
+            break;
+          case error.TIMEOUT:
+            errorMessage = "Location request timed out. Please try again";
+            break;
+        }
+        
         toast({
-          title: "Location access denied",
-          description: "Please enable location to see nearby products",
+          title: "Location access needed",
+          description: errorMessage,
           variant: "destructive",
         });
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
       }
     );
   };
