@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Header } from '@/components/Header';
 import { ProductCard } from '@/components/ProductCard';
+import { ShopifyProductCard } from '@/components/ShopifyProductCard';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -38,10 +39,14 @@ const Products = () => {
   const [currentCity, setCurrentCity] = useState('');
   const { toast } = useToast();
 
+  const [shopifyProducts, setShopifyProducts] = useState<any[]>([]);
+  const [shopifyLoading, setShopifyLoading] = useState(false);
+
   useEffect(() => {
     fetchUserRole();
     fetchCategories();
     fetchProducts();
+    fetchShopifyProducts();
   }, []);
 
   const fetchUserRole = async () => {
@@ -118,6 +123,36 @@ const Products = () => {
       });
     } finally {
       setLocationLoading(false);
+    }
+  };
+
+  // Fetch Shopify products via Storefront API
+  const fetchShopifyProducts = async () => {
+    setShopifyLoading(true);
+    try {
+      const SHOPIFY_STORE_PERMANENT_DOMAIN = 'mart-connect-now-ozguo.myshopify.com';
+      const SHOPIFY_API_VERSION = '2025-07';
+      const SHOPIFY_STOREFRONT_TOKEN = 'e96f15bb99fa3bd3ebcd9682b4aaca17';
+
+      const response = await fetch(`https://${SHOPIFY_STORE_PERMANENT_DOMAIN}/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Storefront-Access-Token': SHOPIFY_STOREFRONT_TOKEN,
+        },
+        body: JSON.stringify({
+          query: `query GetProducts($first: Int!) {\n            products(first: $first) {\n              edges {\n                node {\n                  id\n                  title\n                  description\n                  handle\n                  priceRange { minVariantPrice { amount currencyCode } }\n                  images(first: 1) { edges { node { url altText } } }\n                }\n              }\n            }\n          }`,
+          variables: { first: 24 },
+        }),
+      });
+
+      const data = await response.json();
+      const edges = data?.data?.products?.edges || [];
+      setShopifyProducts(edges);
+    } catch (e) {
+      console.error('Shopify fetch error:', e);
+    } finally {
+      setShopifyLoading(false);
     }
   };
 
@@ -198,6 +233,9 @@ const Products = () => {
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+  const filteredShopifyProducts = shopifyProducts.filter((edge: any) =>
+    edge?.node?.title?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -269,11 +307,7 @@ const Products = () => {
               </div>
             ))}
           </div>
-        ) : filteredProducts.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-muted-foreground text-lg">No products found</p>
-          </div>
-        ) : (
+        ) : filteredProducts.length > 0 ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filteredProducts.map((product) => (
               <ProductCard 
@@ -284,6 +318,26 @@ const Products = () => {
                 sellerLocation={product.seller_location}
               />
             ))}
+          </div>
+        ) : shopifyLoading ? (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {[...Array(8)].map((_, i) => (
+              <div key={i} className="space-y-3">
+                <Skeleton className="aspect-square rounded-lg" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ))}
+          </div>
+        ) : filteredShopifyProducts.length > 0 ? (
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filteredShopifyProducts.map((edge: any) => (
+              <ShopifyProductCard key={edge.node.id} product={edge.node} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <p className="text-muted-foreground text-lg">No products found</p>
           </div>
         )}
       </div>
