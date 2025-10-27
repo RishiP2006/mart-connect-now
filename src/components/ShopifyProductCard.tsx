@@ -59,7 +59,7 @@ export const ShopifyProductCard = ({ product }: ShopifyProductCardProps) => {
           {price?.currencyCode || 'USD'} {price?.amount ? Number(price.amount).toFixed(2) : '—'}
         </span>
         <Button variant="secondary" asChild>
-          <a href={`/product/${product.handle}`} aria-label={`View ${product.title}`}>
+          <a href={`/products/${product.handle}`} aria-label={`View ${product.title}`}>
             View
           </a>
         </Button>
