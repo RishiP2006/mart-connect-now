@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, User, Package, LogOut } from 'lucide-react';
+import { CartDrawer } from '@/components/CartDrawer';
 import { useCart } from '@/contexts/CartContext';
 import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +42,7 @@ export const Header = ({ userRole }: HeaderProps) => {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Existing local cart button */}
           <Button
             variant="ghost"
             size="icon"
@@ -54,6 +56,10 @@ export const Header = ({ userRole }: HeaderProps) => {
               </Badge>
             )}
           </Button>
+
+          {/* Shopify cart drawer trigger */}
+          <CartDrawer />
+
           <Button variant="ghost" size="icon" onClick={() => navigate('/profile')}>
             <User className="h-5 w-5" />
           </Button>

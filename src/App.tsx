@@ -14,6 +14,7 @@ import Checkout from "./pages/Checkout";
 import Profile from "./pages/Profile";
 import SellerProducts from "./pages/SellerProducts";
 import NotFound from "./pages/NotFound";
+import ShopifyProductDetail from "./pages/ShopifyProductDetail";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/products" element={<Products />} />
             <Route path="/products/:id" element={<ProductDetail />} />
+            <Route path="/shopify/:handle" element={<ShopifyProductDetail />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/profile" element={<Profile />} />
