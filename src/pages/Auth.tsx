@@ -39,7 +39,21 @@ export default function Auth() {
 
   useEffect(() => {
     if (session) {
-      navigate("/dashboard");
+      // Redirect based on role after login/signup
+      const checkRole = async () => {
+        const { data } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .single();
+        
+        if (data?.role) {
+          navigate(`/${data.role}`);
+        } else {
+          navigate("/customer");
+        }
+      };
+      checkRole();
     }
   }, [session, navigate]);
 

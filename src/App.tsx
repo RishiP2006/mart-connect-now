@@ -15,6 +15,10 @@ import Profile from "./pages/Profile";
 import SellerProducts from "./pages/SellerProducts";
 import NotFound from "./pages/NotFound";
 import ShopifyProductDetail from "./pages/ShopifyProductDetail";
+import CustomerDashboard from "./pages/CustomerDashboard";
+import RetailerDashboard from "./pages/RetailerDashboard";
+import WholesalerDashboard from "./pages/WholesalerDashboard";
+import RoleSelection from "./pages/RoleSelection";
 
 const queryClient = new QueryClient();
 
@@ -26,11 +30,15 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<RoleSelection />} />
+            <Route path="/shopify" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/customer" element={<CustomerDashboard />} />
+            <Route path="/retailer" element={<RetailerDashboard />} />
+            <Route path="/wholesaler" element={<WholesalerDashboard />} />
             <Route path="/products" element={<Products />} />
-            <Route path="/products/:id" element={<ProductDetail />} />
+            <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/shopify/:handle" element={<ShopifyProductDetail />} />
             <Route path="/cart" element={<Cart />} />
             <Route path="/checkout" element={<Checkout />} />
