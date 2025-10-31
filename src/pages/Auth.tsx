@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { ArrowLeft, Mail, Lock, User } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
@@ -20,6 +21,8 @@ export default function Auth() {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [otp, setOtp] = useState("");
 
   useEffect(() => {
     // Set up auth state listener first
@@ -76,14 +79,11 @@ export default function Auth() {
           setLoading(false);
           return;
         }
-
-        const redirectUrl = `${window.location.origin}/`;
         
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            emailRedirectTo: redirectUrl,
             data: {
               full_name: fullName,
             },
@@ -93,20 +93,44 @@ export default function Auth() {
         if (error) throw error;
 
         if (data.user) {
-          // Insert role for the new user
-          const { error: roleError } = await supabase
-            .from("user_roles")
-            .insert({ user_id: data.user.id, role: role as any });
-
-          if (roleError) {
-            console.error("Role assignment error:", roleError);
-          }
-
-          toast.success("Account created! Please check your email to confirm.");
+          setShowOtpInput(true);
+          toast.success("Please check your email for the verification code.");
         }
       }
     } catch (error: any) {
       toast.error(error.message || "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token: otp,
+        type: 'signup',
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // Insert role for the new user
+        const { error: roleError } = await supabase
+          .from("user_roles")
+          .insert({ user_id: data.user.id, role: role as any });
+
+        if (roleError) {
+          console.error("Role assignment error:", roleError);
+        }
+
+        toast.success("Email verified successfully!");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Invalid verification code");
     } finally {
       setLoading(false);
     }
@@ -139,7 +163,54 @@ export default function Auth() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
+          {showOtpInput ? (
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="otp">Enter Verification Code</Label>
+                <p className="text-sm text-muted-foreground">
+                  We sent a 6-digit code to {email}
+                </p>
+                <InputOTP
+                  value={otp}
+                  onChange={setOtp}
+                  maxLength={6}
+                  className="w-full justify-center"
+                >
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full" 
+                size="lg"
+                disabled={loading || otp.length !== 6}
+              >
+                {loading ? "Verifying..." : "Verify Email"}
+              </Button>
+
+              <div className="text-center text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowOtpInput(false);
+                    setOtp("");
+                  }}
+                  className="text-primary hover:underline"
+                >
+                  Back to signup
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleAuth} className="space-y-4">
             {!isLogin && (
               <div className="space-y-2">
                 <Label htmlFor="fullName">Full Name</Label>
@@ -213,6 +284,7 @@ export default function Auth() {
               </button>
             </div>
           </form>
+          )}
         </CardContent>
       </Card>
     </div>
