@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { ArrowLeft, Mail, Lock, User } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
+import { FcGoogle } from "react-icons/fc";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 export default function Auth() {
@@ -41,24 +42,75 @@ export default function Auth() {
   }, []);
 
   useEffect(() => {
-    if (session) {
-      // Redirect based on role after login/signup
-      const checkRole = async () => {
-        const { data } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', session.user.id)
+    if (session?.user && role) {
+      setTimeout(async () => {
+        const { data: existingRole } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
           .single();
-        
-        if (data?.role) {
-          navigate(`/${data.role}`);
-        } else {
-          navigate("/customer");
+
+        if (!existingRole) {
+          // Assign role for new users (including Google sign-ins)
+          await supabase
+            .from("user_roles")
+            .insert({ user_id: session.user.id, role: role as any });
+          
+          // Create profile if it doesn't exist
+          const { data: existingProfile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("id", session.user.id)
+            .single();
+          
+          if (!existingProfile) {
+            await supabase
+              .from("profiles")
+              .insert({
+                id: session.user.id,
+                full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
+              });
+          }
         }
-      };
-      checkRole();
+
+        // Redirect based on role
+        const { data: userRole } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .single();
+
+        if (userRole?.role) {
+          navigate(`/${userRole.role}`);
+        } else {
+          navigate('/customer');
+        }
+      }, 0);
     }
-  }, [session, navigate]);
+  }, [session, role, navigate]);
+
+  const handleGoogleAuth = async () => {
+    setLoading(true);
+    try {
+      const redirectUrl = `${window.location.origin}/auth?role=${role}`;
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast.error(error.message || "Failed to sign in with Google");
+      setLoading(false);
+    }
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,7 +124,7 @@ export default function Auth() {
         });
 
         if (error) throw error;
-        toast.success("Logged in successfully!");
+        toast.success("Signed in successfully!");
       } else {
         if (!fullName.trim()) {
           toast.error("Please enter your full name");
@@ -210,7 +262,31 @@ export default function Auth() {
               </div>
             </form>
           ) : (
-            <form onSubmit={handleAuth} className="space-y-4">
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full"
+                onClick={handleGoogleAuth}
+                disabled={loading}
+              >
+                <FcGoogle className="mr-2 h-5 w-5" />
+                Continue with Google
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with email
+                  </span>
+                </div>
+              </div>
+
+              <form onSubmit={handleAuth} className="space-y-4">
             {!isLogin && (
               <div className="space-y-2">
                 <Label htmlFor="fullName">Full Name</Label>
@@ -284,6 +360,7 @@ export default function Auth() {
               </button>
             </div>
           </form>
+            </>
           )}
         </CardContent>
       </Card>
