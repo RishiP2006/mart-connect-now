@@ -228,7 +228,7 @@ export default function Auth() {
               <div className="space-y-2">
                 <Label htmlFor="otp">Enter Verification Code</Label>
                 <p className="text-sm text-muted-foreground">
-                  We sent a 6-digit code to {email}
+                  We sent a 6-digit code to {phone}
                 </p>
                 <InputOTP
                   value={otp}
@@ -327,21 +327,23 @@ export default function Auth() {
               </>
             )}
             
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10"
-                  required
-                />
+            {isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
