@@ -20,7 +20,6 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [showOtpInput, setShowOtpInput] = useState(false);
@@ -132,21 +131,15 @@ export default function Auth() {
           setLoading(false);
           return;
         }
-
-        if (!phone.trim()) {
-          toast.error("Please enter your phone number");
-          setLoading(false);
-          return;
-        }
         
         const { data, error } = await supabase.auth.signUp({
-          phone,
+          email,
           password,
           options: {
             data: {
               full_name: fullName,
-              email: email,
             },
+            emailRedirectTo: `${window.location.origin}/auth?role=${role}`,
           },
         });
 
@@ -154,7 +147,7 @@ export default function Auth() {
 
         if (data.user) {
           setShowOtpInput(true);
-          toast.success("Verification code sent to your phone!");
+          toast.success("Verification code sent to your email!");
         }
       }
     } catch (error: any) {
@@ -170,9 +163,9 @@ export default function Auth() {
 
     try {
       const { data, error } = await supabase.auth.verifyOtp({
-        phone,
+        email,
         token: otp,
-        type: 'sms',
+        type: 'email',
       });
 
       if (error) throw error;
@@ -228,7 +221,7 @@ export default function Auth() {
               <div className="space-y-2">
                 <Label htmlFor="otp">Enter Verification Code</Label>
                 <p className="text-sm text-muted-foreground">
-                  We sent a 6-digit code to {phone}
+                  We sent a 6-digit code to {email}
                 </p>
                 <InputOTP
                   value={otp}
@@ -296,54 +289,38 @@ export default function Auth() {
 
               <form onSubmit={handleAuth} className="space-y-4">
             {!isLogin && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="fullName"
-                      type="text"
-                      placeholder="John Doe"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="pl-10"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="+1234567890"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground">Include country code (e.g., +1 for US)</p>
-                </div>
-              </>
-            )}
-            
-            {isLogin && (
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="fullName">Full Name</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="fullName"
+                    type="text"
+                    placeholder="John Doe"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
                     className="pl-10"
                     required
                   />
                 </div>
               </div>
             )}
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-10"
+                  required
+                />
+              </div>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
