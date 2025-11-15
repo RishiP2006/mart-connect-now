@@ -20,6 +20,7 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [showOtpInput, setShowOtpInput] = useState(false);
@@ -131,13 +132,20 @@ export default function Auth() {
           setLoading(false);
           return;
         }
+
+        if (!phone.trim()) {
+          toast.error("Please enter your phone number");
+          setLoading(false);
+          return;
+        }
         
         const { data, error } = await supabase.auth.signUp({
-          email,
+          phone,
           password,
           options: {
             data: {
               full_name: fullName,
+              email: email,
             },
           },
         });
@@ -146,7 +154,7 @@ export default function Auth() {
 
         if (data.user) {
           setShowOtpInput(true);
-          toast.success("Please check your email for the verification code.");
+          toast.success("Verification code sent to your phone!");
         }
       }
     } catch (error: any) {
@@ -162,9 +170,9 @@ export default function Auth() {
 
     try {
       const { data, error } = await supabase.auth.verifyOtp({
-        email,
+        phone,
         token: otp,
-        type: 'signup',
+        type: 'sms',
       });
 
       if (error) throw error;
@@ -288,21 +296,35 @@ export default function Auth() {
 
               <form onSubmit={handleAuth} className="space-y-4">
             {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Full Name</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="fullName"
+                      type="text"
+                      placeholder="John Doe"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="pl-10"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone Number</Label>
                   <Input
-                    id="fullName"
-                    type="text"
-                    placeholder="John Doe"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="pl-10"
+                    id="phone"
+                    type="tel"
+                    placeholder="+1234567890"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
                     required
                   />
+                  <p className="text-xs text-muted-foreground">Include country code (e.g., +1 for US)</p>
                 </div>
-              </div>
+              </>
             )}
             
             <div className="space-y-2">
