@@ -39,7 +39,9 @@ export const ShoppingProductCard = ({ product }: ShoppingProductCardProps) => {
         </p>
         <p className="text-lg font-bold">${product.price}</p>
         <p className="text-xs text-muted-foreground">
-          {product.stock_quantity > 0 ? `${product.stock_quantity} in stock` : 'Out of stock'}
+          {product.stock_quantity > 0 
+            ? `${product.stock_quantity} ${product.name.toLowerCase()} left` 
+            : 'Out of stock'}
         </p>
       </CardContent>
       <CardFooter className="p-4 pt-0">
