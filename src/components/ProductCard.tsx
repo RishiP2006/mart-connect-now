@@ -4,6 +4,14 @@ import { Badge } from '@/components/ui/badge';
 import { ShoppingCart, Package, MapPin, Store, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+// Generate consistent pseudo-random values based on product id
+const generateProductMetrics = (id: string) => {
+  const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const rating = 3.5 + (hash % 15) / 10; // Range: 3.5 - 5.0
+  const reviewCount = 10 + (hash % 50); // Range: 10 - 59
+  return { rating: Math.round(rating * 10) / 10, reviewCount };
+};
+
 interface ProductCardProps {
   id: string;
   name: string;
@@ -28,6 +36,8 @@ export const ProductCard = ({
   sellerLocation
 }: ProductCardProps) => {
   const navigate = useNavigate();
+  const { rating, reviewCount } = generateProductMetrics(id);
+  const filledStars = Math.floor(rating);
 
   return (
     <Card 
@@ -82,10 +92,10 @@ export const ProductCard = ({
           {[...Array(5)].map((_, i) => (
             <Star 
               key={i} 
-              className={`h-3 w-3 ${i < 4 ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`}
+              className={`h-3 w-3 ${i < filledStars ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`}
             />
           ))}
-          <span className="text-xs text-muted-foreground ml-1">4.5 (24 reviews)</span>
+          <span className="text-xs text-muted-foreground ml-1">{rating} ({reviewCount} reviews)</span>
         </div>
         
         <div className="flex items-baseline gap-2">
