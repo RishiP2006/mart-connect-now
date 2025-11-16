@@ -80,7 +80,11 @@ export const ProductCard = ({
         
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-bold text-primary">${price}</span>
-          <span className="text-xs text-muted-foreground">{stock_quantity} in stock</span>
+          <span className="text-xs text-muted-foreground">
+            {stock_quantity > 0 
+              ? `${stock_quantity} ${name.toLowerCase()} left` 
+              : 'Out of stock'}
+          </span>
         </div>
       </CardContent>
       <CardFooter className="p-4 pt-0">

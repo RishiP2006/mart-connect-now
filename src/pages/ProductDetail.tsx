@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
-import { Package, ShoppingCart, Minus, Plus } from 'lucide-react';
+import { Package, ShoppingCart, Minus, Plus, Star } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent } from '@/components/ui/card';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -130,7 +132,9 @@ const ProductDetail = () => {
             <div className="flex items-center gap-2 text-sm">
               <span className="font-semibold">Stock:</span>
               <span className={product.stock_quantity > 0 ? 'text-accent' : 'text-destructive'}>
-                {product.stock_quantity > 0 ? `${product.stock_quantity} available` : 'Out of stock'}
+                {product.stock_quantity > 0 
+                  ? `${product.stock_quantity} ${product.name.toLowerCase()} left` 
+                  : 'Out of stock'}
               </span>
             </div>
 
@@ -170,6 +174,65 @@ const ProductDetail = () => {
                 </Button>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Reviews Section */}
+        <div className="mt-12">
+          <h2 className="text-2xl font-bold mb-6">Customer Reviews</h2>
+          <div className="space-y-4">
+            {[
+              {
+                name: "Sarah Johnson",
+                rating: 5,
+                comment: "Absolutely love this product! The quality exceeded my expectations and delivery was super fast.",
+                date: "2 days ago"
+              },
+              {
+                name: "Michael Chen",
+                rating: 4,
+                comment: "Great value for money. Works exactly as described. Would definitely recommend to others.",
+                date: "1 week ago"
+              },
+              {
+                name: "Emily Rodriguez",
+                rating: 5,
+                comment: "Perfect! This is exactly what I was looking for. The seller was very responsive and helpful.",
+                date: "2 weeks ago"
+              },
+              {
+                name: "David Kim",
+                rating: 4,
+                comment: "Good product overall. Shipping took a bit longer than expected but the item itself is excellent.",
+                date: "3 weeks ago"
+              }
+            ].map((review, index) => (
+              <Card key={index}>
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-4">
+                    <Avatar>
+                      <AvatarFallback>{review.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold">{review.name}</h4>
+                        <span className="text-xs text-muted-foreground">{review.date}</span>
+                      </div>
+                      <div className="flex items-center gap-1 mb-2">
+                        {[...Array(5)].map((_, i) => (
+                          <Star 
+                            key={i} 
+                            className={`h-4 w-4 ${i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`}
+                          />
+                        ))}
+                        <span className="text-sm font-medium ml-1">{review.rating}/5</span>
+                      </div>
+                      <p className="text-muted-foreground">{review.comment}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       </div>
