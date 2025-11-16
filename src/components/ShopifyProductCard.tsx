@@ -1,5 +1,6 @@
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Star } from 'lucide-react';
 
 interface ShopifyImageNode {
   url: string;
@@ -53,6 +54,16 @@ export const ShopifyProductCard = ({ product }: ShopifyProductCardProps) => {
         <p className="text-sm text-muted-foreground line-clamp-2">
           {product.description || '—'}
         </p>
+        <div className="flex items-center gap-1">
+          {[...Array(5)].map((_, i) => (
+            <Star 
+              key={i} 
+              className={`h-3 w-3 ${i < 4 ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`}
+            />
+          ))}
+          <span className="text-xs text-muted-foreground ml-1">4.5 (18 reviews)</span>
+        </div>
+        <p className="text-xs text-muted-foreground">12 items left</p>
       </CardContent>
       <CardFooter className="p-4 pt-0 flex items-center justify-between">
         <span className="font-bold">

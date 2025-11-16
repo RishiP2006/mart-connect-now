@@ -1,7 +1,7 @@
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ShoppingCart, Package, MapPin, Store } from 'lucide-react';
+import { ShoppingCart, Package, MapPin, Store, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface ProductCardProps {
@@ -77,6 +77,16 @@ export const ProductCard = ({
             </span>
           </div>
         )}
+        
+        <div className="flex items-center gap-1 mb-2">
+          {[...Array(5)].map((_, i) => (
+            <Star 
+              key={i} 
+              className={`h-3 w-3 ${i < 4 ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`}
+            />
+          ))}
+          <span className="text-xs text-muted-foreground ml-1">4.5 (24 reviews)</span>
+        </div>
         
         <div className="flex items-baseline gap-2">
           <span className="text-2xl font-bold text-primary">${price}</span>
