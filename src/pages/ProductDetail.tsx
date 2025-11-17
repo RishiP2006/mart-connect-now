@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { GoogleMap } from '@/components/GoogleMap';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -28,12 +29,33 @@ const ProductDetail = () => {
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState({ rating: 5, comment: '' });
   const [submittingFeedback, setSubmittingFeedback] = useState(false);
+  const [sellerProfile, setSellerProfile] = useState<any>(null);
 
   useEffect(() => {
     fetchUserRole();
     fetchProduct();
     fetchFeedback();
+    trackProductView();
   }, [id]);
+
+  const trackProductView = async () => {
+    if (!id) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    try {
+      await supabase
+        .from('browsing_history')
+        .insert({
+          user_id: session.user.id,
+          product_id: id,
+          viewed_at: new Date().toISOString(),
+        });
+    } catch (error) {
+      // Silently fail - browsing history is not critical
+      console.error('Error tracking product view:', error);
+    }
+  };
 
   const fetchUserRole = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -55,6 +77,17 @@ const ProductDetail = () => {
       .eq('id', id)
       .single();
     setProduct(data);
+    
+    // Fetch seller profile for location
+    if (data?.seller_id) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.seller_id)
+        .single();
+      setSellerProfile(profile);
+    }
+    
     setLoading(false);
   };
 
@@ -276,6 +309,18 @@ const ProductDetail = () => {
             )}
           </div>
         </div>
+
+        {/* Seller Location Map */}
+        {sellerProfile?.location_lat && sellerProfile?.location_lng && (
+          <div className="mt-12">
+            <GoogleMap
+              lat={Number(sellerProfile.location_lat)}
+              lng={Number(sellerProfile.location_lng)}
+              sellerName={sellerProfile.full_name}
+              address={sellerProfile.address}
+            />
+          </div>
+        )}
 
         {/* Reviews Section */}
         <div className="mt-12">

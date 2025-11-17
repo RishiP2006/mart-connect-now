@@ -29,6 +29,7 @@ import { DashboardHeader } from '@/components/DashboardHeader';
 
 export default function CustomerDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,9 +46,11 @@ export default function CustomerDashboard() {
 
       if (productsData) setProducts(productsData as Product[]);
 
-      // Fetch user's recent orders
+      // Fetch user's recent orders and recommendations
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Fetch personalized recommendations
+        await fetchRecommendations(user.id);
         const { data: ordersData } = await supabase
           .from('orders')
           .select(`
@@ -106,6 +109,93 @@ export default function CustomerDashboard() {
     return cleanup;
   }, []);
 
+  const fetchRecommendations = async (userId: string) => {
+    try {
+      // Get user's browsing history
+      const { data: browsingHistory } = await supabase
+        .from('browsing_history')
+        .select('product_id')
+        .eq('user_id', userId)
+        .order('viewed_at', { ascending: false })
+        .limit(10);
+
+      // Get user's purchase history
+      const { data: purchaseHistory } = await supabase
+        .from('orders')
+        .select('product_id')
+        .eq('customer_id', userId)
+        .limit(10);
+
+      // Combine and get unique product IDs
+      const viewedProductIds = browsingHistory?.map(h => h.product_id) || [];
+      const purchasedProductIds = purchaseHistory?.map(o => o.product_id) || [];
+      const allProductIds = [...new Set([...viewedProductIds, ...purchasedProductIds])];
+
+      if (allProductIds.length === 0) {
+        // No history, show featured products
+        const { data: featuredData } = await supabase
+          .from('products')
+          .select('*')
+          .gt('stock_quantity', 0)
+          .limit(4);
+        if (featuredData) setRecommendedProducts(featuredData as Product[]);
+        return;
+      }
+
+      // Get categories of viewed/purchased products
+      const { data: userProducts } = await supabase
+        .from('products')
+        .select('category_id')
+        .in('id', allProductIds);
+
+      const categoryIds = [...new Set(userProducts?.map(p => p.category_id).filter(Boolean) || [])];
+
+      if (categoryIds.length === 0) {
+        // No categories found, show featured products
+        const { data: featuredData } = await supabase
+          .from('products')
+          .select('*')
+          .gt('stock_quantity', 0)
+          .limit(4);
+        if (featuredData) setRecommendedProducts(featuredData as Product[]);
+        return;
+      }
+
+      // Recommend products from same categories (excluding already viewed/purchased)
+      const { data: allRecommended } = await supabase
+        .from('products')
+        .select('*')
+        .in('category_id', categoryIds)
+        .gt('stock_quantity', 0);
+
+      // Filter out already viewed/purchased products
+      const recommendedData = allRecommended?.filter(
+        (p) => !allProductIds.includes(p.id)
+      ).slice(0, 4);
+
+      if (recommendedData && recommendedData.length > 0) {
+        setRecommendedProducts(recommendedData as Product[]);
+      } else {
+        // Fallback to featured products
+        const { data: featuredData } = await supabase
+          .from('products')
+          .select('*')
+          .gt('stock_quantity', 0)
+          .limit(4);
+        if (featuredData) setRecommendedProducts(featuredData as Product[]);
+      }
+    } catch (error) {
+      console.error('Error fetching recommendations:', error);
+      // Fallback to featured products
+      const { data: featuredData } = await supabase
+        .from('products')
+        .select('*')
+        .gt('stock_quantity', 0)
+        .limit(4);
+      if (featuredData) setRecommendedProducts(featuredData as Product[]);
+    }
+  };
+
   if (loading) {
     return <div className="container mx-auto p-6">Loading...</div>;
   }
@@ -152,6 +242,20 @@ export default function CustomerDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {recommendedProducts.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold">Recommended for You</h2>
+            <Link to="/products" className="text-primary hover:underline">View all</Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {recommendedProducts.map((product) => (
+              <ShoppingProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section>
         <div className="flex items-center justify-between mb-4">
