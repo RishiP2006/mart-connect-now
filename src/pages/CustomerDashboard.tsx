@@ -70,35 +70,40 @@ export default function CustomerDashboard() {
     fetchData();
 
     // Set up real-time subscription for order updates
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const channel = supabase
-        .channel('order-updates')
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'orders',
-            filter: `customer_id=eq.${user.id}`,
-          },
-          (payload) => {
-            // Update the order in the list
-            setRecentOrders((prevOrders) =>
-              prevOrders.map((order) =>
-                order.id === payload.new.id
-                  ? { ...order, status: payload.new.status as string }
-                  : order
-              )
-            );
-          }
-        )
-        .subscribe();
+    const setupRealtime = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const channel = supabase
+          .channel('order-updates')
+          .on(
+            'postgres_changes',
+            {
+              event: 'UPDATE',
+              schema: 'public',
+              table: 'orders',
+              filter: `customer_id=eq.${user.id}`,
+            },
+            (payload) => {
+              // Update the order in the list
+              setRecentOrders((prevOrders) =>
+                prevOrders.map((order) =>
+                  order.id === payload.new.id
+                    ? { ...order, status: payload.new.status as string }
+                    : order
+                )
+              );
+            }
+          )
+          .subscribe();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+        return () => {
+          supabase.removeChannel(channel);
+        };
+      }
+    };
+
+    const cleanup = setupRealtime();
+    return cleanup;
   }, []);
 
   if (loading) {
