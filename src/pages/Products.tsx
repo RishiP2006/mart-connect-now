@@ -7,7 +7,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { Search, MapPin, Navigation } from 'lucide-react';
+import { Slider } from '@/components/ui/slider';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Search, MapPin, Navigation, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ProductWithLocation {
@@ -41,6 +46,22 @@ const Products = () => {
 
   const [shopifyProducts, setShopifyProducts] = useState<any[]>([]);
   const [shopifyLoading, setShopifyLoading] = useState(false);
+  
+  // Enhanced filtering state
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
+  const [maxDistance, setMaxDistance] = useState<number>(50);
+  const [showInStockOnly, setShowInStockOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  
+  // Update price range when products load
+  useEffect(() => {
+    if (products.length > 0) {
+      const max = Math.max(...products.map(p => p.price), 1000);
+      if (max > priceRange[1]) {
+        setPriceRange([0, max]);
+      }
+    }
+  }, [products]);
 
   useEffect(() => {
     fetchUserRole();
@@ -230,9 +251,28 @@ const Products = () => {
     fetchProducts();
   }, [selectedCategory, userLocation]);
 
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Get max price for slider
+  const maxPrice = products.length > 0 
+    ? Math.max(...products.map(p => p.price), 1000)
+    : 1000;
+
+  // Enhanced filtering
+  const filteredProducts = products.filter((product) => {
+    // Search filter
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    // Price filter
+    const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
+    
+    // Stock filter
+    const matchesStock = !showInStockOnly || product.stock_quantity > 0;
+    
+    // Distance filter
+    const matchesDistance = !userLocation || !product.distance || product.distance <= maxDistance;
+    
+    return matchesSearch && matchesPrice && matchesStock && matchesDistance;
+  });
+  
   const filteredShopifyProducts = shopifyProducts.filter((edge: any) =>
     edge?.node?.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -295,6 +335,83 @@ const Products = () => {
               ))}
             </SelectContent>
           </Select>
+          <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <Filter className="h-4 w-4" />
+                Filters
+                {filtersOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Filter Products</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Price Range Filter */}
+                  <div className="space-y-2">
+                    <Label>Price Range: ${priceRange[0]} - ${priceRange[1]}</Label>
+                    <Slider
+                      value={priceRange}
+                      onValueChange={(value) => setPriceRange(value as [number, number])}
+                      min={0}
+                      max={maxPrice}
+                      step={10}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>${0}</span>
+                      <span>${maxPrice}</span>
+                    </div>
+                  </div>
+
+                  {/* Stock Availability Filter */}
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="inStock"
+                      checked={showInStockOnly}
+                      onCheckedChange={(checked) => setShowInStockOnly(checked === true)}
+                    />
+                    <Label htmlFor="inStock" className="cursor-pointer">
+                      Show only in-stock items
+                    </Label>
+                  </div>
+
+                  {/* Distance Filter */}
+                  {userLocation && (
+                    <div className="space-y-2">
+                      <Label>Maximum Distance: {maxDistance} km</Label>
+                      <Slider
+                        value={[maxDistance]}
+                        onValueChange={(value) => setMaxDistance(value[0])}
+                        min={1}
+                        max={100}
+                        step={5}
+                        className="w-full"
+                      />
+                      <div className="flex justify-between text-sm text-muted-foreground">
+                        <span>1 km</span>
+                        <span>100 km</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPriceRange([0, maxPrice]);
+                      setShowInStockOnly(false);
+                      setMaxDistance(50);
+                    }}
+                    className="w-full"
+                  >
+                    Reset Filters
+                  </Button>
+                </CardContent>
+              </Card>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         {loading ? (
@@ -316,6 +433,7 @@ const Products = () => {
                 distance={product.distance}
                 sellerName={product.seller_name}
                 sellerLocation={product.seller_location}
+                availability_date={product.availability_date}
               />
             ))}
           </div>

@@ -27,6 +27,7 @@ const SellerProducts = () => {
     stock_quantity: '',
     category_id: '',
     image_url: '',
+    availability_date: '',
   });
 
   useEffect(() => {
@@ -92,6 +93,7 @@ const SellerProducts = () => {
         stock_quantity: parseInt(formData.stock_quantity),
         category_id: formData.category_id || null,
         image_url: formData.image_url || null,
+        availability_date: formData.availability_date || null,
         seller_id: session.user.id,
       };
 
@@ -146,6 +148,7 @@ const SellerProducts = () => {
       stock_quantity: product.stock_quantity.toString(),
       category_id: product.category_id || '',
       image_url: product.image_url || '',
+      availability_date: product.availability_date ? new Date(product.availability_date).toISOString().split('T')[0] : '',
     });
     setDialogOpen(true);
   };
@@ -159,6 +162,7 @@ const SellerProducts = () => {
       stock_quantity: '',
       category_id: '',
       image_url: '',
+      availability_date: '',
     });
   };
 
@@ -246,6 +250,19 @@ const SellerProducts = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="availability_date">Availability Date (Optional)</Label>
+                  <Input
+                    id="availability_date"
+                    type="date"
+                    value={formData.availability_date}
+                    onChange={(e) => setFormData({ ...formData, availability_date: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Expected date when product will be available for delivery
+                  </p>
                 </div>
 
                 <div className="space-y-2">

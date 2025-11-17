@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
-import { Package, ShoppingCart, Minus, Plus, Star } from 'lucide-react';
+import { Package, ShoppingCart, Minus, Plus, Star, Calendar } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -221,13 +221,21 @@ const ProductDetail = () => {
               </div>
             )}
 
-            <div className="flex items-center gap-2 text-sm">
-              <span className="font-semibold">Stock:</span>
-              <span className={product.stock_quantity > 0 ? 'text-accent' : 'text-destructive'}>
-                {product.stock_quantity > 0 
-                  ? `${product.stock_quantity} ${product.name.toLowerCase()} left` 
-                  : 'Out of stock'}
-              </span>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-semibold">Stock:</span>
+                <span className={product.stock_quantity > 0 ? 'text-accent' : 'text-destructive'}>
+                  {product.stock_quantity > 0 
+                    ? `${product.stock_quantity} ${product.name.toLowerCase()} left` 
+                    : 'Out of stock'}
+                </span>
+              </div>
+              {product.availability_date && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Calendar className="h-4 w-4" />
+                  <span>Available from {new Date(product.availability_date).toLocaleDateString()}</span>
+                </div>
+              )}
             </div>
 
             {product.stock_quantity > 0 && (

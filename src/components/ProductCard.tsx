@@ -1,7 +1,7 @@
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ShoppingCart, Package, MapPin, Store, Star } from 'lucide-react';
+import { ShoppingCart, Package, MapPin, Store, Star, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 // Generate consistent pseudo-random values based on product id
@@ -22,12 +22,14 @@ interface ProductCardProps {
   distance?: number;
   sellerName?: string;
   sellerLocation?: string;
+  availability_date?: string | null;
 }
 
 export const ProductCard = ({ 
   id, 
   name, 
-  description, 
+  description,
+  availability_date, 
   price, 
   image_url, 
   stock_quantity,
@@ -98,7 +100,7 @@ export const ProductCard = ({
           <span className="text-xs text-muted-foreground ml-1">{rating} ({reviewCount} reviews)</span>
         </div>
         
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-baseline gap-2 mb-2">
           <span className="text-2xl font-bold text-primary">${price}</span>
           <span className="text-xs text-muted-foreground">
             {stock_quantity > 0 
@@ -106,6 +108,12 @@ export const ProductCard = ({
               : 'Out of stock'}
           </span>
         </div>
+        {availability_date && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+            <Calendar className="h-3 w-3" />
+            <span>Available from {new Date(availability_date).toLocaleDateString()}</span>
+          </div>
+        )}
       </CardContent>
       <CardFooter className="p-4 pt-0">
         <Button 
