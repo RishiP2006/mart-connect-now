@@ -24,6 +24,8 @@ export default function Auth() {
   const [session, setSession] = useState<Session | null>(null);
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [otp, setOtp] = useState("");
+  const [useOtpAuth, setUseOtpAuth] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     // Set up auth state listener first
@@ -40,6 +42,14 @@ export default function Auth() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCooldown]);
 
   useEffect(() => {
     if (session?.user && role) {
@@ -112,12 +122,55 @@ export default function Auth() {
     }
   };
 
+  const handleSendOtp = async () => {
+    if (!email) {
+      toast.error("Please enter your email address");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: !isLogin, // Create user only on signup
+          data: !isLogin && fullName ? {
+            full_name: fullName,
+          } : undefined,
+          emailRedirectTo: `${window.location.origin}/auth?role=${role}`,
+        },
+      });
+
+      if (error) throw error;
+
+      setShowOtpInput(true);
+      setUseOtpAuth(true);
+      setResendCooldown(60); // 60 second cooldown
+      toast.success("Verification code sent to your email!");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send verification code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0) return;
+    await handleSendOtp();
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
       if (isLogin) {
+        // For login, check if user wants to use password or OTP
+        if (useOtpAuth) {
+          // This should not happen as OTP flow is separate
+          return;
+        }
+        
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -132,6 +185,7 @@ export default function Auth() {
           return;
         }
         
+        // For signup with password, use traditional signup
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -145,9 +199,11 @@ export default function Auth() {
 
         if (error) throw error;
 
-        if (data.user) {
-          setShowOtpInput(true);
-          toast.success("Verification code sent to your email!");
+        // Check if email confirmation is required
+        if (data.user && !data.session) {
+          toast.info("Please check your email for a confirmation link");
+        } else if (data.user && data.session) {
+          toast.success("Account created successfully!");
         }
       }
     } catch (error: any) {
@@ -159,6 +215,12 @@ export default function Auth() {
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (otp.length !== 6) {
+      toast.error("Please enter a 6-digit verification code");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -171,19 +233,46 @@ export default function Auth() {
       if (error) throw error;
 
       if (data.user) {
-        // Insert role for the new user
-        const { error: roleError } = await supabase
+        // Check if user already has a role
+        const { data: existingRole } = await supabase
           .from("user_roles")
-          .insert({ user_id: data.user.id, role: role as any });
+          .select("role")
+          .eq("user_id", data.user.id)
+          .single();
 
-        if (roleError) {
-          console.error("Role assignment error:", roleError);
+        if (!existingRole) {
+          // Insert role for the new user
+          const { error: roleError } = await supabase
+            .from("user_roles")
+            .insert({ user_id: data.user.id, role: role as any });
+
+          if (roleError) {
+            console.error("Role assignment error:", roleError);
+          }
+
+          // Create profile if it doesn't exist
+          const { data: existingProfile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("id", data.user.id)
+            .single();
+          
+          if (!existingProfile) {
+            await supabase
+              .from("profiles")
+              .insert({
+                id: data.user.id,
+                full_name: fullName || data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'User',
+              });
+          }
         }
 
         toast.success("Email verified successfully!");
+        // Session will be set by the auth state change listener, which will trigger navigation
       }
     } catch (error: any) {
-      toast.error(error.message || "Invalid verification code");
+      toast.error(error.message || "Invalid verification code. Please try again.");
+      setOtp(""); // Clear OTP on error
     } finally {
       setLoading(false);
     }
@@ -249,17 +338,31 @@ export default function Auth() {
                 {loading ? "Verifying..." : "Verify Email"}
               </Button>
 
-              <div className="text-center text-sm">
+              <div className="text-center space-y-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setShowOtpInput(false);
-                    setOtp("");
-                  }}
-                  className="text-primary hover:underline"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || loading}
+                  className="text-primary hover:underline text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Back to signup
+                  {resendCooldown > 0 
+                    ? `Resend code in ${resendCooldown}s` 
+                    : "Didn't receive code? Resend"}
                 </button>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowOtpInput(false);
+                      setOtp("");
+                      setUseOtpAuth(false);
+                      setResendCooldown(0);
+                    }}
+                    className="text-muted-foreground hover:text-foreground text-sm"
+                  >
+                    Back to {isLogin ? "login" : "signup"}
+                  </button>
+                </div>
               </div>
             </form>
           ) : (
@@ -287,7 +390,14 @@ export default function Auth() {
                 </div>
               </div>
 
-              <form onSubmit={handleAuth} className="space-y-4">
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (useOtpAuth) {
+                  handleSendOtp();
+                } else {
+                  handleAuth(e);
+                }
+              }} className="space-y-4">
             {!isLogin && (
               <div className="space-y-2">
                 <Label htmlFor="fullName">Full Name</Label>
@@ -300,7 +410,7 @@ export default function Auth() {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="pl-10"
-                    required
+                    required={!useOtpAuth}
                   />
                 </div>
               </div>
@@ -318,40 +428,76 @@ export default function Auth() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="pl-10"
                   required
+                  disabled={showOtpInput}
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
-                  required
-                  minLength={6}
-                />
+            {!useOtpAuth && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10"
+                    required
+                    minLength={6}
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
-            <Button 
-              type="submit" 
-              className="w-full" 
-              size="lg"
-              disabled={loading}
-            >
-              {loading ? "Loading..." : isLogin ? "Sign In" : "Create Account"}
-            </Button>
+            {useOtpAuth ? (
+              <Button 
+                type="submit"
+                className="w-full" 
+                size="lg"
+                disabled={loading || !email}
+              >
+                {loading ? "Sending..." : "Send Verification Code"}
+              </Button>
+            ) : (
+              <>
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  size="lg"
+                  disabled={loading}
+                >
+                  {loading ? "Loading..." : isLogin ? "Sign In" : "Create Account"}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  size="lg"
+                  onClick={() => {
+                    setUseOtpAuth(true);
+                    setPassword("");
+                  }}
+                  disabled={loading}
+                >
+                  {isLogin ? "Sign in with OTP" : "Sign up with OTP"}
+                </Button>
+              </>
+            )}
 
             <div className="text-center text-sm">
               <button
                 type="button"
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setUseOtpAuth(false);
+                  setShowOtpInput(false);
+                  setOtp("");
+                  setPassword("");
+                }}
                 className="text-primary hover:underline"
               >
                 {isLogin 
