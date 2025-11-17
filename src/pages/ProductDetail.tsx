@@ -4,12 +4,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { Header } from '@/components/Header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { Package, ShoppingCart, Minus, Plus, Star } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -20,10 +23,16 @@ const ProductDetail = () => {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<any[]>([]);
+  const [feedbackLoading, setFeedbackLoading] = useState(true);
+  const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
+  const [feedbackForm, setFeedbackForm] = useState({ rating: 5, comment: '' });
+  const [submittingFeedback, setSubmittingFeedback] = useState(false);
 
   useEffect(() => {
     fetchUserRole();
     fetchProduct();
+    fetchFeedback();
   }, [id]);
 
   const fetchUserRole = async () => {
@@ -49,6 +58,76 @@ const ProductDetail = () => {
     setLoading(false);
   };
 
+  const fetchFeedback = async () => {
+    if (!id) return;
+    setFeedbackLoading(true);
+    const { data, error } = await supabase
+      .from('feedback')
+      .select(`
+        *,
+        profiles (full_name)
+      `)
+      .eq('product_id', id)
+      .order('created_at', { ascending: false });
+    
+    if (!error && data) {
+      setFeedback(data);
+    }
+    setFeedbackLoading(false);
+  };
+
+  const handleSubmitFeedback = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      toast({
+        title: 'Error',
+        description: 'Please login to submit feedback',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!feedbackForm.comment.trim()) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a comment',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSubmittingFeedback(true);
+    try {
+      const { error } = await supabase
+        .from('feedback')
+        .insert({
+          product_id: id,
+          user_id: session.user.id,
+          rating: feedbackForm.rating,
+          comment: feedbackForm.comment,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Thank you for your feedback!',
+      });
+
+      setFeedbackForm({ rating: 5, comment: '' });
+      setShowFeedbackDialog(false);
+      fetchFeedback();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to submit feedback',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingFeedback(false);
+    }
+  };
+
   const handleAddToCart = () => {
     if (product && quantity > 0 && quantity <= product.stock_quantity) {
       addToCart(product, quantity);
@@ -57,6 +136,19 @@ const ProductDetail = () => {
         description: `${quantity} x ${product.name}`,
       });
     }
+  };
+
+  const getTimeAgo = (date: Date): string => {
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (diffInSeconds < 60) return 'just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    if (diffInSeconds < 2592000) return `${Math.floor(diffInSeconds / 604800)} weeks ago`;
+    if (diffInSeconds < 31536000) return `${Math.floor(diffInSeconds / 2592000)} months ago`;
+    return `${Math.floor(diffInSeconds / 31536000)} years ago`;
   };
 
   if (loading) {
@@ -179,61 +271,119 @@ const ProductDetail = () => {
 
         {/* Reviews Section */}
         <div className="mt-12">
-          <h2 className="text-2xl font-bold mb-6">Customer Reviews</h2>
-          <div className="space-y-4">
-            {[
-              {
-                name: "Sarah Johnson",
-                rating: 5,
-                comment: "Absolutely love this product! The quality exceeded my expectations and delivery was super fast.",
-                date: "2 days ago"
-              },
-              {
-                name: "Michael Chen",
-                rating: 4,
-                comment: "Great value for money. Works exactly as described. Would definitely recommend to others.",
-                date: "1 week ago"
-              },
-              {
-                name: "Emily Rodriguez",
-                rating: 5,
-                comment: "Perfect! This is exactly what I was looking for. The seller was very responsive and helpful.",
-                date: "2 weeks ago"
-              },
-              {
-                name: "David Kim",
-                rating: 4,
-                comment: "Good product overall. Shipping took a bit longer than expected but the item itself is excellent.",
-                date: "3 weeks ago"
-              }
-            ].map((review, index) => (
-              <Card key={index}>
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <Avatar>
-                      <AvatarFallback>{review.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold">{review.name}</h4>
-                        <span className="text-xs text-muted-foreground">{review.date}</span>
-                      </div>
-                      <div className="flex items-center gap-1 mb-2">
-                        {[...Array(5)].map((_, i) => (
-                          <Star 
-                            key={i} 
-                            className={`h-4 w-4 ${i < review.rating ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`}
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold">Customer Reviews ({feedback.length})</h2>
+            <Dialog open={showFeedbackDialog} onOpenChange={setShowFeedbackDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline">Write a Review</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Write a Review</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Rating</Label>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <button
+                          key={rating}
+                          type="button"
+                          onClick={() => setFeedbackForm({ ...feedbackForm, rating })}
+                          className="focus:outline-none"
+                        >
+                          <Star
+                            className={`h-6 w-6 ${
+                              rating <= feedbackForm.rating
+                                ? 'fill-yellow-400 text-yellow-400'
+                                : 'text-muted-foreground'
+                            }`}
                           />
-                        ))}
-                        <span className="text-sm font-medium ml-1">{review.rating}/5</span>
-                      </div>
-                      <p className="text-muted-foreground">{review.comment}</p>
+                        </button>
+                      ))}
+                      <span className="ml-2 text-sm text-muted-foreground">
+                        {feedbackForm.rating}/5
+                      </span>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                  <div className="space-y-2">
+                    <Label htmlFor="comment">Comment</Label>
+                    <Textarea
+                      id="comment"
+                      placeholder="Share your experience with this product..."
+                      value={feedbackForm.comment}
+                      onChange={(e) => setFeedbackForm({ ...feedbackForm, comment: e.target.value })}
+                      rows={4}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleSubmitFeedback}
+                    disabled={submittingFeedback}
+                    className="w-full"
+                  >
+                    {submittingFeedback ? 'Submitting...' : 'Submit Review'}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
+
+          {feedbackLoading ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <Skeleton key={i} className="h-32 w-full" />
+              ))}
+            </div>
+          ) : feedback.length > 0 ? (
+            <div className="space-y-4">
+              {feedback.map((review) => {
+                const userName = (review.profiles as any)?.full_name || 'Anonymous';
+                const initials = userName.split(' ').map((n: string) => n[0]).join('').toUpperCase();
+                const date = new Date(review.created_at);
+                const timeAgo = getTimeAgo(date);
+
+                return (
+                  <Card key={review.id}>
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <Avatar>
+                          <AvatarFallback>{initials}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold">{userName}</h4>
+                            <span className="text-xs text-muted-foreground">{timeAgo}</span>
+                          </div>
+                          <div className="flex items-center gap-1 mb-2">
+                            {[...Array(5)].map((_, i) => (
+                              <Star
+                                key={i}
+                                className={`h-4 w-4 ${
+                                  i < review.rating
+                                    ? 'fill-yellow-400 text-yellow-400'
+                                    : 'text-muted-foreground'
+                                }`}
+                              />
+                            ))}
+                            <span className="text-sm font-medium ml-1">{review.rating}/5</span>
+                          </div>
+                          {review.comment && (
+                            <p className="text-muted-foreground">{review.comment}</p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-center text-muted-foreground">
+                No reviews yet. Be the first to review this product!
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

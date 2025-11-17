@@ -6,10 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2 } from 'lucide-react';
+import { Loader2, CalendarIcon } from 'lucide-react';
+import { format } from 'date-fns';
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -19,8 +22,10 @@ const Checkout = () => {
   const [userRole, setUserRole] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     delivery_address: '',
-    payment_method: 'cash',
+    payment_method: 'offline',
   });
+  const [deliveryDate, setDeliveryDate] = useState<Date | undefined>(undefined);
+  const [showCalendar, setShowCalendar] = useState(false);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -57,7 +62,7 @@ const Checkout = () => {
         return;
       }
 
-      // Create orders for each item
+      // Create orders for each item and update stock
       const orders = items.map((item) => ({
         customer_id: session.user.id,
         product_id: item.product_id,
@@ -68,9 +73,54 @@ const Checkout = () => {
         status: 'pending',
       }));
 
-      const { error } = await supabase.from('orders').insert(orders);
+      // Insert orders
+      const { error: orderError } = await supabase.from('orders').insert(orders);
 
-      if (error) throw error;
+      if (orderError) throw orderError;
+
+      // Update stock for each product
+      for (const item of items) {
+        const { data: product } = await supabase
+          .from('products')
+          .select('stock_quantity')
+          .eq('id', item.product_id)
+          .single();
+
+        if (product) {
+          const newStock = Math.max(0, product.stock_quantity - item.quantity);
+          const { error: stockError } = await supabase
+            .from('products')
+            .update({ stock_quantity: newStock })
+            .eq('id', item.product_id);
+
+          if (stockError) {
+            console.error('Error updating stock for product:', item.product_id, stockError);
+          }
+        }
+      }
+
+      // Send email notification
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', session.user.id)
+          .single();
+
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user?.email) {
+          // Use Supabase Edge Function or external service for email
+          // For now, we'll log it. You can integrate with SendGrid, Resend, etc.
+          console.log('Order confirmation email would be sent to:', user.email);
+          
+          // You can add actual email sending here using Supabase Edge Functions
+          // or a service like Resend, SendGrid, etc.
+        }
+      } catch (emailError) {
+        console.error('Error sending email:', emailError);
+        // Don't fail the order if email fails
+      }
 
       toast({
         title: 'Order placed successfully!',
@@ -114,6 +164,39 @@ const Checkout = () => {
                     required
                   />
                 </div>
+                {formData.payment_method === 'offline' && (
+                  <div className="space-y-2">
+                    <Label>Preferred Delivery Date (Optional)</Label>
+                    <Popover open={showCalendar} onOpenChange={setShowCalendar}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className="w-full justify-start text-left font-normal"
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {deliveryDate ? format(deliveryDate, 'PPP') : 'Pick a date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={deliveryDate}
+                          onSelect={(date) => {
+                            setDeliveryDate(date);
+                            setShowCalendar(false);
+                          }}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {deliveryDate && (
+                      <p className="text-sm text-muted-foreground">
+                        You'll receive a reminder before delivery
+                      </p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -130,9 +213,8 @@ const Checkout = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash">Cash on Delivery</SelectItem>
-                    <SelectItem value="card">Credit/Debit Card</SelectItem>
-                    <SelectItem value="mobile">Mobile Payment</SelectItem>
+                    <SelectItem value="offline">Cash on Delivery (Offline)</SelectItem>
+                    <SelectItem value="online">Online Payment</SelectItem>
                   </SelectContent>
                 </Select>
               </CardContent>

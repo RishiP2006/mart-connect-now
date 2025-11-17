@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Mail, Lock, User } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import { FcGoogle } from "react-icons/fc";
+import { FaFacebook } from "react-icons/fa";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 export default function Auth() {
@@ -118,6 +119,25 @@ export default function Auth() {
       if (error) throw error;
     } catch (error: any) {
       toast.error(error.message || "Failed to sign in with Google");
+      setLoading(false);
+    }
+  };
+
+  const handleFacebookAuth = async () => {
+    setLoading(true);
+    try {
+      const redirectUrl = `${window.location.origin}/auth?role=${role}`;
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'facebook',
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast.error(error.message || "Failed to sign in with Facebook");
       setLoading(false);
     }
   };
@@ -377,6 +397,18 @@ export default function Auth() {
               >
                 <FcGoogle className="mr-2 h-5 w-5" />
                 Continue with Google
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full"
+                onClick={handleFacebookAuth}
+                disabled={loading}
+              >
+                <FaFacebook className="mr-2 h-5 w-5 text-blue-600" />
+                Continue with Facebook
               </Button>
 
               <div className="relative">
