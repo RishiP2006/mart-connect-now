@@ -259,7 +259,8 @@ const Products = () => {
   // Enhanced filtering
   const filteredProducts = products.filter((product) => {
     // Search filter
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const productName = (product.name ?? '').toLowerCase();
+    const matchesSearch = productName.includes(searchQuery.toLowerCase());
     
     // Price filter
     const matchesPrice = product.price >= priceRange[0] && product.price <= priceRange[1];
