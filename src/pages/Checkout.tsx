@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { sendOrderConfirmationEmail } from '@/lib/email';
 import { Loader2, CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -74,9 +75,12 @@ const Checkout = () => {
       }));
 
       // Insert orders
-      const { error: orderError } = await supabase.from('orders').insert(orders);
+      const { data: insertedOrders, error: orderError } = await supabase.from('orders').insert(orders).select();
 
       if (orderError) throw orderError;
+
+      // Get the first order ID for email (if multiple orders, use the first one)
+      const orderId = insertedOrders?.[0]?.id || undefined;
 
       // Update stock for each product
       for (const item of items) {
@@ -110,12 +114,29 @@ const Checkout = () => {
         const { data: { user } } = await supabase.auth.getUser();
         
         if (user?.email) {
-          // Use Supabase Edge Function or external service for email
-          // For now, we'll log it. You can integrate with SendGrid, Resend, etc.
-          console.log('Order confirmation email would be sent to:', user.email);
-          
-          // You can add actual email sending here using Supabase Edge Functions
-          // or a service like Resend, SendGrid, etc.
+          // Prepare order items for email
+          const orderItems = items.map((item) => ({
+            productName: item.product_name,
+            quantity: item.quantity,
+            price: item.product_price,
+          }));
+
+          // Send order confirmation email
+          const emailSent = await sendOrderConfirmationEmail({
+            to: user.email,
+            customerName: profile?.full_name || user.user_metadata?.full_name || user.email.split('@')[0] || 'Customer',
+            orderItems,
+            totalPrice,
+            deliveryAddress: formData.delivery_address,
+            paymentMethod: formData.payment_method,
+            orderId: orderId,
+          });
+
+          if (emailSent) {
+            console.log('Order confirmation email sent successfully to:', user.email);
+          } else {
+            console.warn('Email service not configured. Order confirmation email was not sent.');
+          }
         }
       } catch (emailError) {
         console.error('Error sending email:', emailError);
