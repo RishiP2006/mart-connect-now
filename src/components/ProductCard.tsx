@@ -40,6 +40,7 @@ export const ProductCard = ({
   const navigate = useNavigate();
   const { rating, reviewCount } = generateProductMetrics(id);
   const filledStars = Math.floor(rating);
+  const displayName = name || 'Product';
 
   return (
     <Card 
@@ -51,7 +52,7 @@ export const ProductCard = ({
           {image_url ? (
             <img
               src={image_url}
-              alt={name}
+              alt={displayName}
               className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
             />
           ) : (
@@ -75,7 +76,7 @@ export const ProductCard = ({
         </div>
       </CardHeader>
       <CardContent className="p-4">
-        <h3 className="font-semibold text-lg mb-1 line-clamp-1">{name}</h3>
+        <h3 className="font-semibold text-lg mb-1 line-clamp-1">{displayName}</h3>
         {description && (
           <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{description}</p>
         )}
@@ -104,7 +105,7 @@ export const ProductCard = ({
           <span className="text-2xl font-bold text-primary">${price}</span>
           <span className="text-xs text-muted-foreground">
             {stock_quantity > 0 
-              ? `${stock_quantity} ${name.toLowerCase()} left` 
+              ? `${stock_quantity} ${displayName.toLowerCase()} left` 
               : 'Out of stock'}
           </span>
         </div>
