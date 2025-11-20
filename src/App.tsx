@@ -19,6 +19,7 @@ import CustomerDashboard from "./pages/CustomerDashboard";
 import RetailerDashboard from "./pages/RetailerDashboard";
 import WholesalerDashboard from "./pages/WholesalerDashboard";
 import RoleSelection from "./pages/RoleSelection";
+import { RoleGuard } from "./components/RoleGuard";
 
 const queryClient = new QueryClient();
 
@@ -33,17 +34,94 @@ const App = () => (
             <Route path="/" element={<RoleSelection />} />
             <Route path="/shopify" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/customer" element={<CustomerDashboard />} />
-            <Route path="/retailer" element={<RetailerDashboard />} />
-            <Route path="/wholesaler" element={<WholesalerDashboard />} />
-            <Route path="/products" element={<Products />} />
-            <Route path="/product/:id" element={<ProductDetail />} />
-            <Route path="/shopify/:handle" element={<ShopifyProductDetail />} />
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/seller/products" element={<SellerProducts />} />
+            <Route
+              path="/dashboard"
+              element={
+                <RoleGuard>
+                  <Dashboard />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/customer"
+              element={
+                <RoleGuard allowedRoles={["customer"]}>
+                  <CustomerDashboard />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/retailer"
+              element={
+                <RoleGuard allowedRoles={["retailer"]}>
+                  <RetailerDashboard />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/wholesaler"
+              element={
+                <RoleGuard allowedRoles={["wholesaler"]}>
+                  <WholesalerDashboard />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/products"
+              element={
+                <RoleGuard allowedRoles={["customer"]}>
+                  <Products />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/product/:id"
+              element={
+                <RoleGuard allowedRoles={["customer"]}>
+                  <ProductDetail />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/shopify/:handle"
+              element={
+                <RoleGuard allowedRoles={["customer"]}>
+                  <ShopifyProductDetail />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/cart"
+              element={
+                <RoleGuard allowedRoles={["customer"]}>
+                  <Cart />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/checkout"
+              element={
+                <RoleGuard allowedRoles={["customer"]}>
+                  <Checkout />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <RoleGuard>
+                  <Profile />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/seller/products"
+              element={
+                <RoleGuard allowedRoles={["retailer", "wholesaler"]}>
+                  <SellerProducts />
+                </RoleGuard>
+              }
+            />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

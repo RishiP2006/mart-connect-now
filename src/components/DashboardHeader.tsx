@@ -43,10 +43,6 @@ export const DashboardHeader = ({ title, role }: DashboardHeaderProps) => {
               <CartDrawer />
             </>
           )}
-          
-          {role === 'wholesaler' && (
-            <CartDrawer />
-          )}
 
           <Button variant="ghost" size="icon" asChild>
             <Link to="/profile" aria-label="Profile">

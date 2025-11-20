@@ -12,9 +12,15 @@ import { FcGoogle } from "react-icons/fc";
 import { FaFacebook } from "react-icons/fa";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
+type PortalRole = "customer" | "retailer" | "wholesaler";
+
+const isValidPortalRole = (value: string | null): value is PortalRole => {
+  return value === "customer" || value === "retailer" || value === "wholesaler";
+};
+
 export default function Auth() {
   const [searchParams] = useSearchParams();
-  const role = searchParams.get("role") || "customer";
+  const requestedRole = isValidPortalRole(searchParams.get("role")) ? searchParams.get("role")! : "customer";
   const navigate = useNavigate();
   
   const [isLogin, setIsLogin] = useState(true);
@@ -53,57 +59,57 @@ export default function Auth() {
   }, [resendCooldown]);
 
   useEffect(() => {
-    if (session?.user && role) {
-      setTimeout(async () => {
-        const { data: existingRole } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id)
-          .single();
+    if (!session?.user) return;
 
-        if (!existingRole) {
-          // Assign role for new users (including Google sign-ins)
-          await supabase
-            .from("user_roles")
-            .insert({ user_id: session.user.id, role: role as any });
-          
-          // Create profile if it doesn't exist
-          const { data: existingProfile } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("id", session.user.id)
-            .single();
-          
-          if (!existingProfile) {
-            await supabase
-              .from("profiles")
-              .insert({
-                id: session.user.id,
-                full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'User',
-              });
-          }
+    const enforceRoleSeparation = async () => {
+      const { data: existingRole } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", session.user.id)
+        .single();
+
+      if (existingRole?.role) {
+        if (existingRole.role !== requestedRole) {
+          toast.warning(
+            `This email is registered as a ${existingRole.role}. Redirecting you to the correct dashboard.`
+          );
         }
+        navigate(`/${existingRole.role}`);
+        return;
+      }
 
-        // Redirect based on role
-        const { data: userRole } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id)
-          .single();
+      const normalizedRole = requestedRole as any;
 
-        if (userRole?.role) {
-          navigate(`/${userRole.role}`);
-        } else {
-          navigate('/customer');
-        }
-      }, 0);
-    }
-  }, [session, role, navigate]);
+      await supabase
+        .from("user_roles")
+        .insert({ user_id: session.user.id, role: normalizedRole });
+
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", session.user.id)
+        .single();
+
+      if (!existingProfile) {
+        await supabase.from("profiles").insert({
+          id: session.user.id,
+          full_name:
+            session.user.user_metadata?.full_name ||
+            session.user.email?.split("@")[0] ||
+            "User",
+        });
+      }
+
+      navigate(`/${requestedRole}`);
+    };
+
+    enforceRoleSeparation();
+  }, [session, requestedRole, navigate]);
 
   const handleGoogleAuth = async () => {
     setLoading(true);
     try {
-      const redirectUrl = `${window.location.origin}/auth?role=${role}`;
+      const redirectUrl = `${window.location.origin}/auth?role=${requestedRole}`;
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -126,7 +132,7 @@ export default function Auth() {
   const handleFacebookAuth = async () => {
     setLoading(true);
     try {
-      const redirectUrl = `${window.location.origin}/auth?role=${role}`;
+      const redirectUrl = `${window.location.origin}/auth?role=${requestedRole}`;
       
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'facebook',
@@ -158,7 +164,7 @@ export default function Auth() {
           data: !isLogin && fullName ? {
             full_name: fullName,
           } : undefined,
-          emailRedirectTo: `${window.location.origin}/auth?role=${role}`,
+          emailRedirectTo: `${window.location.origin}/auth?role=${requestedRole}`,
         },
       });
 
@@ -214,7 +220,7 @@ export default function Auth() {
             data: {
               full_name: fullName,
             },
-            emailRedirectTo: `${window.location.origin}/auth?role=${role}`,
+            emailRedirectTo: `${window.location.origin}/auth?role=${requestedRole}`,
           },
         });
 
@@ -265,7 +271,7 @@ export default function Auth() {
           // Insert role for the new user
           const { error: roleError } = await supabase
             .from("user_roles")
-            .insert({ user_id: data.user.id, role: role as any });
+            .insert({ user_id: data.user.id, role: requestedRole as any });
 
           if (roleError) {
             console.error("Role assignment error:", roleError);
@@ -300,7 +306,7 @@ export default function Auth() {
   };
 
   const getRoleDisplay = () => {
-    return role.charAt(0).toUpperCase() + role.slice(1);
+    return requestedRole.charAt(0).toUpperCase() + requestedRole.slice(1);
   };
 
   return (
