@@ -153,6 +153,7 @@ export default function Auth() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
+          channel: 'email', // Force 6-digit OTP instead of magic link
           shouldCreateUser: !isLogin, // Create user only on signup
           data: !isLogin && fullName ? {
             full_name: fullName,
