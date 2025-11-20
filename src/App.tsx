@@ -20,6 +20,7 @@ import RetailerDashboard from "./pages/RetailerDashboard";
 import WholesalerDashboard from "./pages/WholesalerDashboard";
 import RoleSelection from "./pages/RoleSelection";
 import { RoleGuard } from "./components/RoleGuard";
+import OrderConfirmation from "./pages/OrderConfirmation";
 
 const queryClient = new QueryClient();
 
@@ -103,6 +104,14 @@ const App = () => (
               element={
                 <RoleGuard allowedRoles={["customer"]}>
                   <Checkout />
+                </RoleGuard>
+              }
+            />
+            <Route
+              path="/order-confirmation"
+              element={
+                <RoleGuard allowedRoles={["customer"]}>
+                  <OrderConfirmation />
                 </RoleGuard>
               }
             />
