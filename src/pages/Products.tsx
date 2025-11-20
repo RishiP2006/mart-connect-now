@@ -53,6 +53,7 @@ const Products = () => {
   const [maxDistance, setMaxDistance] = useState<number>(50);
   const [showInStockOnly, setShowInStockOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortOption, setSortOption] = useState<'relevance' | 'price-asc' | 'price-desc' | 'qty-asc' | 'qty-desc'>('relevance');
   
   // Update price range when products load
   useEffect(() => {
@@ -297,6 +298,21 @@ const Products = () => {
     
     return matchesSearch && matchesPrice && matchesStock && matchesQuantity && matchesDistance;
   });
+
+  const sortedProducts = filteredProducts.slice().sort((a, b) => {
+    switch (sortOption) {
+      case 'price-asc':
+        return a.price - b.price;
+      case 'price-desc':
+        return b.price - a.price;
+      case 'qty-asc':
+        return a.stock_quantity - b.stock_quantity;
+      case 'qty-desc':
+        return b.stock_quantity - a.stock_quantity;
+      default:
+        return 0;
+    }
+  });
   
   const filteredShopifyProducts = shopifyProducts.filter((edge: any) =>
     edge?.node?.title?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -337,7 +353,7 @@ const Products = () => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
+        <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -347,19 +363,34 @@ const Products = () => {
               className="pl-10"
             />
           </div>
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-full sm:w-[200px]">
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="All Categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={sortOption} onValueChange={(value) => setSortOption(value as typeof sortOption)}>
+              <SelectTrigger className="w-full sm:w-[200px]">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="relevance">Sort: Relevance</SelectItem>
+                <SelectItem value="price-asc">Price: Low to High</SelectItem>
+                <SelectItem value="price-desc">Price: High to Low</SelectItem>
+                <SelectItem value="qty-desc">Quantity: High to Low</SelectItem>
+                <SelectItem value="qty-asc">Quantity: Low to High</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
             <CollapsibleTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -467,9 +498,9 @@ const Products = () => {
               </div>
             ))}
           </div>
-        ) : filteredProducts.length > 0 ? (
+        ) : sortedProducts.length > 0 ? (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredProducts.map((product) => (
+            {sortedProducts.map((product) => (
               <ProductCard 
                 key={product.id} 
                 {...product}
