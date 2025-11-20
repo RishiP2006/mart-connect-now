@@ -105,8 +105,20 @@ export default function CustomerDashboard() {
       }
     };
 
-    const cleanup = setupRealtime();
-    return cleanup;
+    // Execute async setup and handle cleanup properly
+    setupRealtime().then(cleanup => {
+      if (cleanup) {
+        // Store cleanup for useEffect return
+        return cleanup;
+      }
+    });
+
+    // Return cleanup function that will be called on unmount
+    return () => {
+      setupRealtime().then(cleanup => {
+        if (cleanup) cleanup();
+      });
+    };
   }, []);
 
   const fetchRecommendations = async (userId: string) => {

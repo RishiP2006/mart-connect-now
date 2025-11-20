@@ -25,6 +25,7 @@ interface ProductWithLocation {
   seller_id: string;
   category_id: string | null;
   created_at: string;
+  availability_date?: string | null;
   distance?: number;
   seller_name?: string;
   seller_location?: string;
