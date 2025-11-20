@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Package, DollarSign, ShoppingCart } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Plus, Package, DollarSign, ShoppingCart, Bell } from 'lucide-react';
 import { ProductManagementDialog } from '@/components/ProductManagementDialog';
 import { RetailerProductCard } from '@/components/RetailerProductCard';
 
@@ -22,6 +23,22 @@ interface Stats {
   pendingOrders: number;
 }
 
+interface RetailerOrder {
+  id: string;
+  quantity: number;
+  total_price: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+  delivery_address: string;
+  product?: {
+    name: string;
+  };
+  customer?: {
+    full_name: string;
+  };
+}
+
 import { DashboardHeader } from '@/components/DashboardHeader';
 
 export default function RetailerDashboard() {
@@ -29,6 +46,7 @@ export default function RetailerDashboard() {
   const [stats, setStats] = useState<Stats>({ totalProducts: 0, totalRevenue: 0, pendingOrders: 0 });
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [recentOrders, setRecentOrders] = useState<RetailerOrder[]>([]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -54,13 +72,26 @@ export default function RetailerDashboard() {
     // Fetch order stats
     const { data: ordersData } = await supabase
       .from('orders')
-      .select('total_price, status, products!inner(seller_id)')
-      .eq('products.seller_id', user.id);
+      .select(`
+        id,
+        quantity,
+        total_price,
+        payment_method,
+        status,
+        created_at,
+        delivery_address,
+        products!inner(seller_id, name),
+        customer:profiles!orders_customer_id_fkey(full_name)
+      `)
+      .eq('products.seller_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
 
     if (ordersData) {
       const totalRevenue = ordersData.reduce((sum, order) => sum + Number(order.total_price), 0);
       const pendingOrders = ordersData.filter(order => order.status === 'pending').length;
       setStats(prev => ({ ...prev, totalRevenue, pendingOrders }));
+      setRecentOrders(ordersData as unknown as RetailerOrder[]);
     }
 
     setLoading(false);
@@ -121,7 +152,7 @@ export default function RetailerDashboard() {
         </Card>
       </div>
 
-      <section>
+      <section className="space-y-4">
         <h2 className="text-2xl font-bold mb-4">My Products</h2>
         {products.length === 0 ? (
           <Card>
@@ -142,6 +173,76 @@ export default function RetailerDashboard() {
                 product={product}
                 onUpdate={fetchData}
               />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold">Latest Orders</h2>
+          {stats.pendingOrders > 0 && (
+            <Alert className="w-full md:w-auto">
+              <Bell className="h-4 w-4" />
+              <AlertTitle>Pending Orders</AlertTitle>
+              <AlertDescription>
+                You have {stats.pendingOrders} order{stats.pendingOrders === 1 ? '' : 's'} awaiting action.
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+        {recentOrders.length === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center text-muted-foreground">
+              No orders yet. New orders will appear here as soon as customers buy your products.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4">
+            {recentOrders.map((order) => (
+              <Card key={order.id}>
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Order ID</p>
+                      <p className="font-semibold">{order.id}</p>
+                    </div>
+                    <span className="text-sm capitalize px-3 py-1 rounded-full bg-muted">
+                      {order.status}
+                    </span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Customer</p>
+                      <p className="font-medium">{order.customer?.full_name || 'Customer'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase text-muted-foreground">Product</p>
+                      <p className="font-medium">{order.product?.name}</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Quantity</p>
+                      <p className="font-semibold">{order.quantity}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Payment</p>
+                      <p className="font-semibold">
+                        {order.payment_method === 'online' ? 'Online' : 'Cash on Delivery'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Total</p>
+                      <p className="font-semibold">${Number(order.total_price).toFixed(2)}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-muted-foreground">Delivery Address</p>
+                    <p className="text-sm">{order.delivery_address}</p>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}

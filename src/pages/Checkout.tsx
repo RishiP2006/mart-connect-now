@@ -103,6 +103,12 @@ const Checkout = () => {
         }
       }
 
+      const orderItems = items.map((item) => ({
+        productName: item.product_name,
+        quantity: item.quantity,
+        price: item.product_price,
+      }));
+
       // Send email notification
       try {
         const { data: profile } = await supabase
@@ -115,12 +121,6 @@ const Checkout = () => {
         
         if (user?.email) {
           // Prepare order items for email
-          const orderItems = items.map((item) => ({
-            productName: item.product_name,
-            quantity: item.quantity,
-            price: item.product_price,
-          }));
-
           // Send order confirmation email
           const emailSent = await sendOrderConfirmationEmail({
             to: user.email,
@@ -149,7 +149,15 @@ const Checkout = () => {
       });
 
       clearCart();
-      navigate('/dashboard');
+      navigate('/order-confirmation', {
+        state: {
+          orderId,
+          totalPrice,
+          paymentMethod: formData.payment_method,
+          deliveryAddress: formData.delivery_address,
+          items: orderItems,
+        },
+      });
     } catch (error: any) {
       toast({
         title: 'Error placing order',
