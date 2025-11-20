@@ -44,13 +44,17 @@ const ProductDetail = () => {
     if (!session) return;
 
     try {
-      await supabase
+      const { error } = await supabase
         .from('browsing_history')
         .insert({
           user_id: session.user.id,
           product_id: id,
           viewed_at: new Date().toISOString(),
         });
+      
+      if (error) {
+        console.error('Error tracking product view:', error);
+      }
     } catch (error) {
       // Silently fail - browsing history is not critical
       console.error('Error tracking product view:', error);

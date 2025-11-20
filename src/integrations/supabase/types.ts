@@ -14,6 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      browsing_history: {
+        Row: {
+          id: string
+          product_id: string
+          user_id: string
+          view_duration: number | null
+          viewed_at: string | null
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          user_id: string
+          view_duration?: number | null
+          viewed_at?: string | null
+        }
+        Update: {
+          id?: string
+          product_id?: string
+          user_id?: string
+          view_duration?: number | null
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "browsing_history_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string | null
@@ -122,6 +154,7 @@ export type Database = {
       }
       products: {
         Row: {
+          availability_date: string | null
           category_id: string | null
           created_at: string | null
           description: string | null
@@ -137,6 +170,7 @@ export type Database = {
           wholesale_price: number | null
         }
         Insert: {
+          availability_date?: string | null
           category_id?: string | null
           created_at?: string | null
           description?: string | null
@@ -152,6 +186,7 @@ export type Database = {
           wholesale_price?: number | null
         }
         Update: {
+          availability_date?: string | null
           category_id?: string | null
           created_at?: string | null
           description?: string | null
