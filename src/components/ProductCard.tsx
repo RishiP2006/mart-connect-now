@@ -45,7 +45,7 @@ export const ProductCard = ({
   return (
     <Card 
       className="group overflow-hidden transition-all duration-300 hover:shadow-[var(--shadow-hover)] hover:-translate-y-1 cursor-pointer"
-      onClick={() => navigate(`/products/${id}`)}
+      onClick={() => navigate(`/product/${id}`)}
     >
       <CardHeader className="p-0">
         <div className="relative aspect-square overflow-hidden bg-muted">
@@ -122,7 +122,7 @@ export const ProductCard = ({
           disabled={stock_quantity === 0}
           onClick={(e) => {
             e.stopPropagation();
-            navigate(`/products/${id}`);
+            navigate(`/product/${id}`);
           }}
         >
           <ShoppingCart className="h-4 w-4 mr-2" />
