@@ -49,6 +49,7 @@ const Products = () => {
   
   // Enhanced filtering state
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
+  const [quantityRange, setQuantityRange] = useState<[number, number]>([0, 500]);
   const [maxDistance, setMaxDistance] = useState<number>(50);
   const [showInStockOnly, setShowInStockOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -56,10 +57,21 @@ const Products = () => {
   // Update price range when products load
   useEffect(() => {
     if (products.length > 0) {
-      const max = Math.max(...products.map(p => p.price), 1000);
-      if (max > priceRange[1]) {
-        setPriceRange([0, max]);
-      }
+      const prices = products.map(p => p.price);
+      const quantities = products.map(p => p.stock_quantity);
+      const maxPriceValue = Math.max(...prices, 1000);
+      const minPriceValue = Math.min(...prices, 0);
+      const maxQuantityValue = Math.max(...quantities, 100);
+
+      setPriceRange(([currentMin, currentMax]) => [
+        Math.min(currentMin, minPriceValue),
+        Math.max(currentMax, maxPriceValue),
+      ]);
+
+      setQuantityRange(([currentMin, currentMax]) => [
+        Math.min(currentMin, 0),
+        Math.max(currentMax, maxQuantityValue),
+      ]);
     }
   }, [products]);
 
@@ -255,8 +267,17 @@ const Products = () => {
   const maxPrice = products.length > 0 
     ? Math.max(...products.map(p => p.price), 1000)
     : 1000;
+  const minPrice = products.length > 0
+    ? Math.min(...products.map(p => p.price), 0)
+    : 0;
+  const minQuantity = products.length > 0
+    ? Math.min(...products.map(p => p.stock_quantity), 0)
+    : 0;
 
-  // Enhanced filtering
+  const maxQuantity = products.length > 0
+    ? Math.max(...products.map(p => p.stock_quantity), 100)
+    : 100;
+
   const filteredProducts = products.filter((product) => {
     // Search filter
     const productName = (product.name ?? '').toLowerCase();
@@ -267,11 +288,14 @@ const Products = () => {
     
     // Stock filter
     const matchesStock = !showInStockOnly || product.stock_quantity > 0;
+
+    // Quantity filter
+    const matchesQuantity = product.stock_quantity >= quantityRange[0] && product.stock_quantity <= quantityRange[1];
     
     // Distance filter
     const matchesDistance = !userLocation || !product.distance || product.distance <= maxDistance;
     
-    return matchesSearch && matchesPrice && matchesStock && matchesDistance;
+    return matchesSearch && matchesPrice && matchesStock && matchesQuantity && matchesDistance;
   });
   
   const filteredShopifyProducts = shopifyProducts.filter((edge: any) =>
@@ -356,14 +380,31 @@ const Products = () => {
                     <Slider
                       value={priceRange}
                       onValueChange={(value) => setPriceRange(value as [number, number])}
-                      min={0}
+                      min={minPrice}
                       max={maxPrice}
                       step={10}
                       className="w-full"
                     />
                     <div className="flex justify-between text-sm text-muted-foreground">
-                      <span>${0}</span>
+                      <span>${minPrice}</span>
                       <span>${maxPrice}</span>
+                    </div>
+                  </div>
+
+                  {/* Quantity Filter */}
+                  <div className="space-y-2">
+                    <Label>Quantity Range: {quantityRange[0]} - {quantityRange[1]} units</Label>
+                    <Slider
+                      value={quantityRange}
+                      onValueChange={(value) => setQuantityRange(value as [number, number])}
+                      min={Math.min(minQuantity, 0)}
+                      max={maxQuantity}
+                      step={5}
+                      className="w-full"
+                    />
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>{Math.min(minQuantity, 0)} units</span>
+                      <span>{maxQuantity} units</span>
                     </div>
                   </div>
 
@@ -401,7 +442,8 @@ const Products = () => {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setPriceRange([0, maxPrice]);
+                      setPriceRange([minPrice, maxPrice]);
+                      setQuantityRange([Math.min(minQuantity, 0), maxQuantity]);
                       setShowInStockOnly(false);
                       setMaxDistance(50);
                     }}
