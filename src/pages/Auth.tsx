@@ -34,21 +34,26 @@ export default function Auth() {
   const [useOtpAuth, setUseOtpAuth] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
-  useEffect(() => {
-    // Set up auth state listener first
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-      }
-    );
+useEffect(() => {
+  // Always require explicit login by clearing any existing session
+  supabase.auth.signOut().catch((error) => {
+    console.error("Error enforcing manual sign-in:", error);
+  });
 
-    // Then check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+  // Set up auth state listener after forcing sign-out
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    (_event, session) => {
       setSession(session);
-    });
+    }
+  );
 
-    return () => subscription.unsubscribe();
-  }, []);
+  // Then check for existing session (should be null after sign-out, but keep for safety)
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setSession(session);
+  });
+
+  return () => subscription.unsubscribe();
+}, []);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -70,10 +75,18 @@ export default function Auth() {
 
       if (existingRole?.role) {
         if (existingRole.role !== requestedRole) {
-          toast.warning(
-            `This email is registered as a ${existingRole.role}. Redirecting you to the correct dashboard.`
+          toast.error(
+            `This email is registered as a ${existingRole.role}. Please sign in through the ${existingRole.role} portal.`
           );
+          await supabase.auth.signOut();
+          setSession(null);
+          setShowOtpInput(false);
+          setOtp("");
+          setUseOtpAuth(false);
+          setLoading(false);
+          return;
         }
+
         navigate(`/${existingRole.role}`);
         return;
       }
