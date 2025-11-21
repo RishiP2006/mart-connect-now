@@ -2,9 +2,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle2, Package, ArrowRight } from "lucide-react";
+import { CheckCircle2, Package, ArrowRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { OrderStatusTracker, OrderStatus } from "@/components/OrderStatusTracker";
 
 interface OrderConfirmationState {
   orderId?: string;
@@ -23,6 +24,8 @@ const OrderConfirmation = () => {
   const location = useLocation();
   const state = (location.state || {}) as OrderConfirmationState;
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [orderStatus, setOrderStatus] = useState<OrderStatus>("pending");
+  const [trackingReady, setTrackingReady] = useState(false);
 
   useEffect(() => {
     const fetchRole = async () => {
@@ -38,6 +41,49 @@ const OrderConfirmation = () => {
     };
     fetchRole();
   }, []);
+
+  useEffect(() => {
+    if (!state.orderId) return;
+
+    let channel: ReturnType<typeof supabase.channel> | undefined;
+
+    const loadOrder = async () => {
+      const { data } = await supabase
+        .from("orders")
+        .select("status")
+        .eq("id", state.orderId)
+        .single();
+
+      if (data?.status) {
+        setOrderStatus(data.status as OrderStatus);
+      }
+      setTrackingReady(true);
+
+      channel = supabase
+        .channel(`order-${state.orderId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "orders",
+            filter: `id=eq.${state.orderId}`,
+          },
+          (payload) => {
+            setOrderStatus(payload.new.status as OrderStatus);
+          }
+        )
+        .subscribe();
+    };
+
+    loadOrder();
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [state.orderId]);
 
   const paymentLabel =
     state.paymentMethod === "online" ? "Online Payment" : "Cash on Delivery";
@@ -62,6 +108,26 @@ const OrderConfirmation = () => {
                   Order ID
                 </p>
                 <p className="font-semibold">{state.orderId}</p>
+              </div>
+            )}
+
+            {state.orderId && (
+              <div className="rounded-lg border p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <p className="text-lg font-semibold capitalize">
+                      {orderStatus.replace(/_/g, " ")}
+                    </p>
+                  </div>
+                  {!trackingReady && (
+                    <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Syncing latest updates...
+                    </div>
+                  )}
+                </div>
+                <OrderStatusTracker status={orderStatus} />
               </div>
             )}
 

@@ -38,6 +38,9 @@ export const DashboardHeader = ({ title, role }: DashboardHeaderProps) => {
           {role === 'customer' && (
             <>
               <Button variant="ghost" asChild>
+                <Link to="/customer/orders">My Orders</Link>
+              </Button>
+              <Button variant="ghost" asChild>
                 <Link to="/products">Browse Products</Link>
               </Button>
               <CartDrawer />

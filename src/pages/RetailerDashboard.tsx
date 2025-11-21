@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,6 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Plus, Package, DollarSign, ShoppingCart, Bell } from 'lucide-react';
 import { ProductManagementDialog } from '@/components/ProductManagementDialog';
 import { RetailerProductCard } from '@/components/RetailerProductCard';
+import { OrderStatus, OrderStatusTracker } from '@/components/OrderStatusTracker';
+import { toast } from 'sonner';
 
 interface Product {
   id: string;
@@ -28,7 +30,7 @@ interface RetailerOrder {
   quantity: number;
   total_price: number;
   payment_method: string;
-  status: string;
+  status: OrderStatus;
   created_at: string;
   delivery_address: string;
   product?: {
@@ -47,8 +49,11 @@ export default function RetailerDashboard() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [recentOrders, setRecentOrders] = useState<RetailerOrder[]>([]);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const orderIdsRef = useRef<Set<string>>(new Set());
+  const hasMountedRef = useRef(false);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     
@@ -69,8 +74,12 @@ export default function RetailerDashboard() {
       setStats(prev => ({ ...prev, totalProducts: productsData.length }));
     }
 
-    // Fetch order stats
-    const { data: ordersData } = await supabase
+    // Fetch order stats - try with seller_id first, fallback to product-based query
+    let ordersData;
+    let orderError;
+
+    // Try querying with seller_id (after migration)
+    const { data: data1, error: error1 } = await supabase
       .from('orders')
       .select(`
         id,
@@ -80,26 +89,175 @@ export default function RetailerDashboard() {
         status,
         created_at,
         delivery_address,
-        products!inner(seller_id, name),
+        product:products!inner(name, seller_id),
         customer:profiles!orders_customer_id_fkey(full_name)
       `)
-      .eq('products.seller_id', user.id)
+      .eq('orders.seller_id', user.id)
       .order('created_at', { ascending: false })
       .limit(5);
 
+    if (!error1 && data1) {
+      ordersData = data1;
+    } else {
+      // Fallback: query by products seller_id if seller_id column doesn't exist on orders
+      const { data: data2, error: error2 } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          quantity,
+          total_price,
+          payment_method,
+          status,
+          created_at,
+          delivery_address,
+          product:products!inner(name, seller_id),
+          customer:profiles!orders_customer_id_fkey(full_name)
+        `)
+        .eq('products.seller_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error2) {
+        console.error('Error fetching orders:', error2);
+        orderError = error2;
+      } else {
+        ordersData = data2;
+      }
+    }
+
     if (ordersData) {
+      const newOrders = ordersData.filter(order => !orderIdsRef.current.has(order.id));
+      ordersData.forEach(order => orderIdsRef.current.add(order.id));
+
       const totalRevenue = ordersData.reduce((sum, order) => sum + Number(order.total_price), 0);
       const pendingOrders = ordersData.filter(order => order.status === 'pending').length;
       setStats(prev => ({ ...prev, totalRevenue, pendingOrders }));
       setRecentOrders(ordersData as unknown as RetailerOrder[]);
+
+      if (hasMountedRef.current && newOrders.length > 0) {
+        const first = newOrders[0] as RetailerOrder;
+        toast.info('New order received', {
+          description: `${first.customer?.full_name || 'Customer'} ordered ${first.quantity} ${first.product?.name || 'item(s)'}`
+        });
+      }
+      hasMountedRef.current = true;
+    } else if (orderError) {
+      console.error('Failed to fetch orders:', orderError);
     }
 
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
+
+  useEffect(() => {
+    let channelRef: ReturnType<typeof supabase.channel> | undefined;
+
+    const setupRealtime = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Subscribe to all order changes, then filter in the callback
+      // This works even if seller_id column doesn't exist yet
+      channelRef = supabase
+        .channel(`retailer-orders-${user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'orders',
+          },
+          async (payload) => {
+            // For INSERT, check if order belongs to this retailer
+            if (payload.eventType === 'INSERT') {
+              const order = payload.new as any;
+              
+              // Check if seller_id matches (after migration)
+              if (order.seller_id === user.id) {
+                toast.info("New order received", {
+                  description: `Customer ordered ${order.quantity} unit(s).`,
+                });
+                fetchData();
+                return;
+              }
+              
+              // Fallback: check via product if seller_id doesn't exist yet
+              if (!order.seller_id) {
+                const { data: product } = await supabase
+                  .from('products')
+                  .select('seller_id')
+                  .eq('id', order.product_id)
+                  .single();
+                
+                if (product?.seller_id === user.id) {
+                  toast.info("New order received", {
+                    description: `Customer ordered ${order.quantity} unit(s).`,
+                  });
+                  fetchData();
+                }
+              }
+            }
+
+            if (payload.eventType === 'UPDATE') {
+              const order = payload.new as any;
+              
+              // Only update if this order belongs to us
+              if (order.seller_id === user.id || !order.seller_id) {
+                setRecentOrders((prev) => {
+                  const existing = prev.find(o => o.id === order.id);
+                  if (existing) {
+                    return prev.map((o) =>
+                      o.id === order.id
+                        ? { ...o, status: order.status as OrderStatus }
+                        : o
+                    );
+                  }
+                  return prev;
+                });
+                fetchData();
+              }
+            }
+          }
+        )
+        .subscribe();
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channelRef) {
+        supabase.removeChannel(channelRef);
+      }
+    };
+  }, [fetchData]);
+
+  const updateOrderStatus = async (orderId: string, nextStatus: OrderStatus) => {
+    setUpdatingOrderId(orderId);
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: nextStatus })
+      .eq('id', orderId);
+
+    if (error) {
+      toast.error("Unable to update order", {
+        description: error.message,
+      });
+    } else {
+      toast.success("Order updated", {
+        description: `Status changed to ${nextStatus.replace(/_/g, ' ')}`,
+      });
+      setRecentOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId ? { ...order, status: nextStatus } : order
+        )
+      );
+      fetchData();
+    }
+    setUpdatingOrderId(null);
+  };
 
   if (loading) {
     return <div className="container mx-auto p-6">Loading...</div>;
@@ -201,16 +359,17 @@ export default function RetailerDashboard() {
           <div className="grid gap-4">
             {recentOrders.map((order) => (
               <Card key={order.id}>
-                <CardContent className="p-4 space-y-2">
+                <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="text-sm text-muted-foreground">Order ID</p>
                       <p className="font-semibold">{order.id}</p>
                     </div>
                     <span className="text-sm capitalize px-3 py-1 rounded-full bg-muted">
-                      {order.status}
+                      {order.status.replace(/_/g, ' ')}
                     </span>
                   </div>
+                  <OrderStatusTracker status={order.status} />
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div>
                       <p className="text-xs uppercase text-muted-foreground">Customer</p>
@@ -240,6 +399,37 @@ export default function RetailerDashboard() {
                   <div>
                     <p className="text-xs uppercase text-muted-foreground">Delivery Address</p>
                     <p className="text-sm">{order.delivery_address}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {order.status === 'pending' && (
+                      <Button
+                        size="sm"
+                        onClick={() => updateOrderStatus(order.id, 'dispatched')}
+                        disabled={updatingOrderId === order.id}
+                      >
+                        Mark as Dispatched
+                      </Button>
+                    )}
+                    {order.status === 'dispatched' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateOrderStatus(order.id, 'on_the_way')}
+                        disabled={updatingOrderId === order.id}
+                      >
+                        Mark as On Its Way
+                      </Button>
+                    )}
+                    {order.status === 'on_the_way' && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => updateOrderStatus(order.id, 'received')}
+                        disabled={updatingOrderId === order.id}
+                      >
+                        Mark as Delivered
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

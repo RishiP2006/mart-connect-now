@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { ShoppingProductCard } from '@/components/ShoppingProductCard';
-import { Package, ShoppingBag, Clock } from 'lucide-react';
+import { Package, ShoppingBag, Clock, Receipt } from 'lucide-react';
+import { DashboardHeader } from '@/components/DashboardHeader';
+import { OrderStatusTracker, OrderStatus } from '@/components/OrderStatusTracker';
 
 interface Product {
   id: string;
@@ -17,15 +20,15 @@ interface Product {
 
 interface Order {
   id: string;
-  status: string;
+  status: OrderStatus;
   total_price: number;
   created_at: string;
+  delivery_address?: string;
+  quantity?: number;
   products: {
     name: string;
   };
 }
-
-import { DashboardHeader } from '@/components/DashboardHeader';
 
 export default function CustomerDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -58,6 +61,8 @@ export default function CustomerDashboard() {
             status,
             total_price,
             created_at,
+            delivery_address,
+            quantity,
             products (name)
           `)
           .eq('customer_id', user.id)
@@ -77,47 +82,64 @@ export default function CustomerDashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         const channel = supabase
-          .channel('order-updates')
+          .channel(`customer-orders-${user.id}`)
           .on(
             'postgres_changes',
             {
-              event: 'UPDATE',
+              event: '*',
               schema: 'public',
               table: 'orders',
               filter: `customer_id=eq.${user.id}`,
             },
-            (payload) => {
-              // Update the order in the list
-              setRecentOrders((prevOrders) =>
-                prevOrders.map((order) =>
-                  order.id === payload.new.id
-                    ? { ...order, status: payload.new.status as string }
-                    : order
-                )
-              );
+            async (payload) => {
+              if (payload.eventType === 'INSERT') {
+                const { data: product } = await supabase
+                  .from('products')
+                  .select('name')
+                  .eq('id', payload.new.product_id)
+                  .single();
+
+                setRecentOrders((prev) => {
+                  const next = [
+                    {
+                      ...(payload.new as Order),
+                      products: { name: product?.name || 'New order' },
+                    },
+                    ...prev,
+                  ];
+                  return next.slice(0, 5);
+                });
+              }
+
+              if (payload.eventType === 'UPDATE') {
+                setRecentOrders((prevOrders) =>
+                  prevOrders.map((order) =>
+                    order.id === payload.new.id
+                      ? {
+                          ...order,
+                          status: payload.new.status as OrderStatus,
+                        }
+                      : order
+                  )
+                );
+              }
             }
           )
           .subscribe();
 
-        return () => {
-          supabase.removeChannel(channel);
-        };
+        return channel;
       }
     };
 
-    // Execute async setup and handle cleanup properly
-    setupRealtime().then(cleanup => {
-      if (cleanup) {
-        // Store cleanup for useEffect return
-        return cleanup;
-      }
+    let channelRef: ReturnType<typeof supabase.channel> | undefined;
+    setupRealtime().then((channel) => {
+      channelRef = channel;
     });
 
-    // Return cleanup function that will be called on unmount
     return () => {
-      setupRealtime().then(cleanup => {
-        if (cleanup) cleanup();
-      });
+      if (channelRef) {
+        supabase.removeChannel(channelRef);
+      }
     };
   }, []);
 
@@ -282,28 +304,47 @@ export default function CustomerDashboard() {
       </section>
 
       {recentOrders.length > 0 && (
-        <section>
-          <h2 className="text-2xl font-bold mb-4">Recent Orders</h2>
-          <Card>
-            <CardContent className="p-0">
-              <div className="divide-y">
-                {recentOrders.map((order) => (
-                  <div key={order.id} className="p-4 flex justify-between items-center">
+        <section className="space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <h2 className="text-2xl font-bold text-foreground">Recent Orders</h2>
+              <div className="inline-flex items-center gap-2 text-sm">
+                <Receipt className="h-4 w-4" />
+                Updated in real time
+              </div>
+            </div>
+            <Button variant="outline" asChild size="sm">
+              <Link to="/customer/orders">View all orders</Link>
+            </Button>
+          </div>
+          <div className="space-y-4">
+            {recentOrders.map((order) => (
+              <Card key={order.id}>
+                <CardContent className="space-y-4 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                      <p className="font-medium">{order.products?.name}</p>
+                      <p className="text-xs uppercase text-muted-foreground">Order</p>
+                      <p className="font-semibold">{order.products?.name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(order.created_at).toLocaleDateString()}
+                        Placed {new Date(order.created_at).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-bold">${order.total_price}</p>
-                      <p className="text-sm text-muted-foreground capitalize">{order.status}</p>
+                    <div className="text-sm sm:text-right">
+                      <p className="text-muted-foreground">Total</p>
+                      <p className="text-2xl font-bold">${Number(order.total_price).toFixed(2)}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <OrderStatusTracker status={order.status} />
+                  {order.delivery_address && (
+                    <div className="rounded-lg border bg-muted/40 p-3 text-sm">
+                      <p className="text-xs uppercase text-muted-foreground">Deliver to</p>
+                      <p className="font-medium">{order.delivery_address}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </section>
       )}
     </main>

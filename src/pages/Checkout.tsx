@@ -72,6 +72,7 @@ const Checkout = () => {
         delivery_address: formData.delivery_address,
         payment_method: formData.payment_method,
         status: 'pending',
+        seller_id: item.seller_id,
       }));
 
       // Insert orders
