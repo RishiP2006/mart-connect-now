@@ -93,9 +93,17 @@ useEffect(() => {
 
       const normalizedRole = requestedRole as any;
 
-      await supabase
+      const { error: roleError } = await supabase
         .from("user_roles")
         .insert({ user_id: session.user.id, role: normalizedRole });
+
+      if (roleError) {
+        console.error("Role assignment error:", roleError);
+        toast.error(`Failed to assign ${requestedRole} role: ${roleError.message}`);
+        await supabase.auth.signOut();
+        setSession(null);
+        return;
+      }
 
       const { data: existingProfile } = await supabase
         .from("profiles")
@@ -104,13 +112,18 @@ useEffect(() => {
         .single();
 
       if (!existingProfile) {
-        await supabase.from("profiles").insert({
+        const { error: profileError } = await supabase.from("profiles").insert({
           id: session.user.id,
           full_name:
             session.user.user_metadata?.full_name ||
             session.user.email?.split("@")[0] ||
             "User",
         });
+        
+        if (profileError) {
+          console.error("Profile creation error:", profileError);
+          toast.error(`Failed to create profile: ${profileError.message}`);
+        }
       }
 
       navigate(`/${requestedRole}`);
@@ -167,14 +180,20 @@ useEffect(() => {
       return;
     }
 
+    // Require full name for signup
+    if (!isLogin && !fullName.trim()) {
+      toast.error("Please enter your full name");
+      return;
+    }
+
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
           shouldCreateUser: !isLogin, // Create user only on signup
-          data: !isLogin && fullName ? {
-            full_name: fullName,
+          data: !isLogin && fullName.trim() ? {
+            full_name: fullName.trim(),
           } : undefined,
           emailRedirectTo: `${window.location.origin}/auth?role=${requestedRole}`,
         },
@@ -287,6 +306,8 @@ useEffect(() => {
 
           if (roleError) {
             console.error("Role assignment error:", roleError);
+            toast.error(`Failed to assign ${requestedRole} role: ${roleError.message}`);
+            // Don't return, continue to create profile
           }
 
           // Create profile if it doesn't exist
@@ -297,12 +318,18 @@ useEffect(() => {
             .single();
           
           if (!existingProfile) {
-            await supabase
+            const profileFullName = fullName?.trim() || data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'User';
+            const { error: profileError } = await supabase
               .from("profiles")
               .insert({
                 id: data.user.id,
-                full_name: fullName || data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'User',
+                full_name: profileFullName,
               });
+            
+            if (profileError) {
+              console.error("Profile creation error:", profileError);
+              toast.error(`Failed to create profile: ${profileError.message}`);
+            }
           }
         }
 
@@ -461,7 +488,7 @@ useEffect(() => {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     className="pl-10"
-                    required={!useOtpAuth}
+                    required={!isLogin}
                   />
                 </div>
               </div>
@@ -508,7 +535,7 @@ useEffect(() => {
                 type="submit"
                 className="w-full" 
                 size="lg"
-                disabled={loading || !email}
+                disabled={loading || !email || (!isLogin && !fullName.trim())}
               >
                 {loading ? "Sending..." : "Send Verification Code"}
               </Button>

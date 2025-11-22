@@ -230,6 +230,7 @@ export type Database = {
           id: string
           location_lat: number | null
           location_lng: number | null
+          location_geojson: Json | null
           phone: string | null
           updated_at: string | null
         }
@@ -241,6 +242,7 @@ export type Database = {
           id: string
           location_lat?: number | null
           location_lng?: number | null
+          location_geojson?: Json | null
           phone?: string | null
           updated_at?: string | null
         }
@@ -252,6 +254,7 @@ export type Database = {
           id?: string
           location_lat?: number | null
           location_lng?: number | null
+          location_geojson?: Json | null
           phone?: string | null
           updated_at?: string | null
         }

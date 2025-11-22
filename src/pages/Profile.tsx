@@ -7,18 +7,35 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MapPin } from 'lucide-react';
+import { GeoJsonPointFeature, GeoJsonSearchResult, searchGeoJsonLocation, toGeoJsonPoint } from '@/lib/geolocation';
+
+type ProfileFormState = {
+  full_name: string;
+  phone: string;
+  address: string;
+  location_lat: string;
+  location_lng: string;
+  location_geojson: GeoJsonPointFeature | null;
+};
 
 const Profile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [profile, setProfile] = useState({
+  const [profile, setProfile] = useState<ProfileFormState>({
     full_name: '',
     phone: '',
     address: '',
+    location_lat: '',
+    location_lng: '',
+    location_geojson: null,
   });
+  const [locationQuery, setLocationQuery] = useState('');
+  const [locationResults, setLocationResults] = useState<GeoJsonSearchResult[]>([]);
+  const [locationSearchLoading, setLocationSearchLoading] = useState(false);
+  const isRetailer = userRole === 'retailer';
 
   useEffect(() => {
     fetchProfile();
@@ -49,7 +66,13 @@ const Profile = () => {
         full_name: profileData.full_name || '',
         phone: profileData.phone || '',
         address: profileData.address || '',
+        location_lat: profileData.location_lat ? String(profileData.location_lat) : '',
+        location_lng: profileData.location_lng ? String(profileData.location_lng) : '',
+        location_geojson: (profileData.location_geojson as GeoJsonPointFeature) || null,
       });
+      if (profileData.address) {
+        setLocationQuery(profileData.address);
+      }
     }
   };
 
@@ -61,9 +84,25 @@ const Profile = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
+      const latNumber = profile.location_lat ? Number(profile.location_lat) : null;
+      const lngNumber = profile.location_lng ? Number(profile.location_lng) : null;
+
+      const payload = {
+        full_name: profile.full_name,
+        phone: profile.phone,
+        address: profile.address,
+        location_lat: latNumber,
+        location_lng: lngNumber,
+        location_geojson:
+          profile.location_geojson ||
+          (latNumber !== null && lngNumber !== null
+            ? toGeoJsonPoint(latNumber, lngNumber, { source: 'manual-entry' })
+            : null),
+      };
+
       const { error } = await supabase
         .from('profiles')
-        .update(profile)
+        .update(payload)
         .eq('id', session.user.id);
 
       if (error) throw error;
@@ -81,6 +120,53 @@ const Profile = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLocationSearch = async () => {
+    if (!locationQuery.trim()) {
+      toast({
+        title: 'Enter a location',
+        description: 'Type an address or landmark to search for it',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setLocationSearchLoading(true);
+    try {
+      const results = await searchGeoJsonLocation(locationQuery, 5);
+      setLocationResults(results);
+      if (results.length === 0) {
+        toast({
+          title: 'No results',
+          description: 'Try refining your search query',
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Geo search failed',
+        description: error.message ?? 'Unable to fetch GeoJSON data',
+        variant: 'destructive',
+      });
+    } finally {
+      setLocationSearchLoading(false);
+    }
+  };
+
+  const handleSelectLocation = (result: GeoJsonSearchResult) => {
+    setProfile((prev) => ({
+      ...prev,
+      address: prev.address || result.displayName,
+      location_lat: result.lat.toString(),
+      location_lng: result.lng.toString(),
+      location_geojson: result.feature,
+    }));
+    setLocationQuery(result.displayName);
+    setLocationResults([]);
+    toast({
+      title: 'Location pinned',
+      description: 'Coordinates captured from GeoJSON result',
+    });
   };
 
   return (
@@ -126,6 +212,102 @@ const Profile = () => {
                   placeholder="Enter your address"
                 />
               </div>
+
+              {isRetailer && (
+                <div className="space-y-4 rounded-lg border p-4">
+                  <div className="flex items-start gap-3">
+                    <MapPin className="h-5 w-5 text-primary mt-1" />
+                    <div>
+                      <p className="font-medium">Store Location (GeoJSON)</p>
+                      <p className="text-sm text-muted-foreground">
+                        Search for your storefront and pin it so customers can discover nearby retailers within 5 km.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      placeholder="Search address or landmark..."
+                      value={locationQuery}
+                      onChange={(e) => setLocationQuery(e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      onClick={handleLocationSearch}
+                      disabled={locationSearchLoading}
+                    >
+                      {locationSearchLoading ? 'Searching...' : 'Search GeoJSON'}
+                    </Button>
+                  </div>
+                  {locationResults.length > 0 && (
+                    <div className="space-y-2 rounded-md border p-3">
+                      <p className="text-xs uppercase text-muted-foreground">Select a result</p>
+                      {locationResults.map((result) => (
+                        <button
+                          key={`${result.lat}-${result.lng}`}
+                          type="button"
+                          className="w-full rounded-md border px-3 py-2 text-left hover:bg-muted transition"
+                          onClick={() => handleSelectLocation(result)}
+                        >
+                          <p className="font-medium">{result.displayName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {result.lat.toFixed(4)}, {result.lng.toFixed(4)}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="latitude">Latitude</Label>
+                      <Input
+                        id="latitude"
+                        type="number"
+                        step="0.000001"
+                        value={profile.location_lat}
+                        placeholder="e.g. -1.2921"
+                        onChange={(e) =>
+                          setProfile((prev) => ({
+                            ...prev,
+                            location_lat: e.target.value,
+                            location_geojson: null,
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="longitude">Longitude</Label>
+                      <Input
+                        id="longitude"
+                        type="number"
+                        step="0.000001"
+                        value={profile.location_lng}
+                        placeholder="e.g. 36.8219"
+                        onChange={(e) =>
+                          setProfile((prev) => ({
+                            ...prev,
+                            location_lng: e.target.value,
+                            location_geojson: null,
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                  {profile.location_lat && profile.location_lng && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        window.open(
+                          `https://www.google.com/maps/search/?api=1&query=${profile.location_lat},${profile.location_lng}`,
+                          '_blank'
+                        )
+                      }
+                    >
+                      Preview on map
+                    </Button>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-4">
                 <Button type="submit" disabled={loading}>

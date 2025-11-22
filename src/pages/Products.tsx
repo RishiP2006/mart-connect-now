@@ -14,6 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Search, MapPin, Navigation, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { haversineDistanceKm, searchGeoJsonLocation } from '@/lib/geolocation';
 
 interface ProductWithLocation {
   id: string;
@@ -32,6 +33,17 @@ interface ProductWithLocation {
   profiles?: any;
 }
 
+interface RetailerLocationSummary {
+  id: string;
+  name?: string;
+  address?: string;
+  lat: number;
+  lng: number;
+  distance: number;
+}
+
+const DEFAULT_NEARBY_DISTANCE_KM = 5;
+
 const Products = () => {
   const [products, setProducts] = useState<ProductWithLocation[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -43,6 +55,12 @@ const Products = () => {
   const [locationLoading, setLocationLoading] = useState(false);
   const [cityName, setCityName] = useState('');
   const [currentCity, setCurrentCity] = useState('');
+  const [manualLat, setManualLat] = useState('');
+  const [manualLng, setManualLng] = useState('');
+  const [manualLocationLoading, setManualLocationLoading] = useState(false);
+  const [browserLocationLoading, setBrowserLocationLoading] = useState(false);
+  const [showManualInputs, setShowManualInputs] = useState(false);
+  const [nearbyRetailers, setNearbyRetailers] = useState<RetailerLocationSummary[]>([]);
   const { toast } = useToast();
 
   const [shopifyProducts, setShopifyProducts] = useState<any[]>([]);
@@ -51,7 +69,7 @@ const Products = () => {
   // Enhanced filtering state
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 1000]);
   const [quantityRange, setQuantityRange] = useState<[number, number]>([0, 500]);
-  const [maxDistance, setMaxDistance] = useState<number>(50);
+  const [maxDistance, setMaxDistance] = useState<number>(DEFAULT_NEARBY_DISTANCE_KM);
   const [showInStockOnly, setShowInStockOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOption, setSortOption] = useState<'relevance' | 'price-asc' | 'price-desc' | 'qty-asc' | 'qty-desc'>('relevance');
@@ -101,16 +119,10 @@ const Products = () => {
     setCategories(data || []);
   };
 
-  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371; // Earth's radius in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
+  const applyUserLocation = (location: { lat: number; lng: number }, label?: string) => {
+    setUserLocation(location);
+    setCurrentCity(label ?? '');
+    setMaxDistance(DEFAULT_NEARBY_DISTANCE_KM);
   };
 
   const searchCityLocation = async () => {
@@ -126,22 +138,14 @@ const Products = () => {
     setLocationLoading(true);
     
     try {
-      // Use Nominatim geocoding API (OpenStreetMap)
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?city=${encodeURIComponent(cityName)}&format=json&limit=1`
-      );
-      const data = await response.json();
+      const results = await searchGeoJsonLocation(cityName, 1);
 
-      if (data && data.length > 0) {
-        const location = {
-          lat: parseFloat(data[0].lat),
-          lng: parseFloat(data[0].lon),
-        };
-        setUserLocation(location);
-        setCurrentCity(data[0].display_name);
+      if (results.length > 0) {
+        const match = results[0];
+        applyUserLocation({ lat: match.lat, lng: match.lng }, match.displayName);
         toast({
           title: "Location found",
-          description: `Showing products near ${data[0].display_name}`,
+          description: `Showing products near ${match.displayName}`,
         });
       } else {
         toast({
@@ -159,6 +163,74 @@ const Products = () => {
     } finally {
       setLocationLoading(false);
     }
+  };
+
+  const handleManualLocation = async () => {
+    if (!manualLat || !manualLng) {
+      toast({
+        title: "Missing coordinates",
+        description: "Please enter both latitude and longitude",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const lat = parseFloat(manualLat);
+    const lng = parseFloat(manualLng);
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      toast({
+        title: "Invalid coordinates",
+        description: "Latitude and longitude must be valid numbers",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setManualLocationLoading(true);
+    try {
+      applyUserLocation({ lat, lng }, `Custom (${lat.toFixed(3)}, ${lng.toFixed(3)})`);
+      toast({
+        title: "Location set",
+        description: "Using your custom coordinates",
+      });
+    } finally {
+      setManualLocationLoading(false);
+    }
+  };
+
+  const handleBrowserLocation = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      toast({
+        title: "Geolocation not supported",
+        description: "Your browser does not support geolocation",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setBrowserLocationLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        applyUserLocation(
+          { lat: coords.latitude, lng: coords.longitude },
+          `My Location (${coords.latitude.toFixed(3)}, ${coords.longitude.toFixed(3)})`
+        );
+        toast({
+          title: "Location detected",
+          description: "Using your current location",
+        });
+        setBrowserLocationLoading(false);
+      },
+      () => {
+        toast({
+          title: "Unable to access location",
+          description: "Please allow location permissions and try again",
+          variant: "destructive",
+        });
+        setBrowserLocationLoading(false);
+      }
+    );
   };
 
   // Fetch Shopify products via Storefront API
@@ -221,7 +293,7 @@ const Products = () => {
       if (sellerIds.length > 0) {
         const { data: profilesData, error: profilesError } = await supabase
           .from('profiles')
-          .select('id, full_name, location_lat, location_lng, address')
+          .select('id, full_name, location_lat, location_lng, address, location_geojson')
           .in('id', sellerIds);
 
         if (profilesError) {
@@ -242,7 +314,7 @@ const Products = () => {
           seller_location: profile?.address,
           distance:
             userLocation && lat !== undefined && lng !== undefined
-              ? calculateDistance(userLocation.lat, userLocation.lng, lat, lng)
+              ? haversineDistanceKm(userLocation.lat, userLocation.lng, lat, lng)
               : undefined,
         } as ProductWithLocation;
       });
@@ -256,6 +328,28 @@ const Products = () => {
       }
 
       setProducts(productsWithLocation);
+
+      if (userLocation && profileMap.size > 0) {
+        const nearby = Array.from(profileMap.values())
+          .filter((profile: any) => profile?.location_lat && profile?.location_lng)
+          .map((profile: any) => {
+            const lat = Number(profile.location_lat);
+            const lng = Number(profile.location_lng);
+            return {
+              id: profile.id,
+              name: profile.full_name,
+              address: profile.address,
+              lat,
+              lng,
+              distance: haversineDistanceKm(userLocation.lat, userLocation.lng, lat, lng),
+            } as RetailerLocationSummary;
+          })
+          .filter((retailer) => retailer.distance <= DEFAULT_NEARBY_DISTANCE_KM)
+          .sort((a, b) => a.distance - b.distance);
+        setNearbyRetailers(nearby);
+      } else {
+        setNearbyRetailers([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -295,7 +389,7 @@ const Products = () => {
     const matchesQuantity = product.stock_quantity >= quantityRange[0] && product.stock_quantity <= quantityRange[1];
     
     // Distance filter
-    const matchesDistance = !userLocation || !product.distance || product.distance <= maxDistance;
+    const matchesDistance = !userLocation || product.distance === undefined || product.distance <= maxDistance;
     
     return matchesSearch && matchesPrice && matchesStock && matchesQuantity && matchesDistance;
   });
@@ -328,31 +422,119 @@ const Products = () => {
           <h1 className="text-4xl font-bold mb-2">Browse Products</h1>
           <p className="text-muted-foreground">Discover products from local retailers and wholesalers</p>
           
-          <div className="mt-4">
-            <div className="flex gap-2 max-w-md">
-              <Input
-                placeholder="Enter your city name..."
-                value={cityName}
-                onChange={(e) => setCityName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && searchCityLocation()}
-                className="flex-1"
-              />
-              <Button 
-                onClick={searchCityLocation} 
-                disabled={locationLoading}
-                className="gap-2"
-              >
-                <MapPin className="h-4 w-4" />
-                {locationLoading ? "Searching..." : "Search"}
-              </Button>
+          <div className="mt-4 space-y-3">
+            <div className="flex flex-col gap-3">
+              <div className="flex gap-2 max-w-md">
+                <Input
+                  placeholder="Search your city or address..."
+                  value={cityName}
+                  onChange={(e) => setCityName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && searchCityLocation()}
+                  className="flex-1"
+                />
+                <Button 
+                  onClick={searchCityLocation} 
+                  disabled={locationLoading}
+                  className="gap-2"
+                >
+                  <MapPin className="h-4 w-4" />
+                  {locationLoading ? "Searching..." : "Search"}
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button 
+                  type="button"
+                  variant="outline"
+                  onClick={handleBrowserLocation}
+                  disabled={browserLocationLoading}
+                  className="gap-2"
+                >
+                  <Navigation className="h-4 w-4" />
+                  {browserLocationLoading ? 'Locating...' : 'Use my location'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setShowManualInputs((prev) => !prev)}
+                >
+                  {showManualInputs ? 'Hide manual entry' : 'Enter coordinates manually'}
+                </Button>
+              </div>
             </div>
+            {showManualInputs && (
+              <div className="grid gap-2 sm:grid-cols-3 max-w-2xl">
+                <Input
+                  type="number"
+                  placeholder="Latitude"
+                  value={manualLat}
+                  onChange={(e) => setManualLat(e.target.value)}
+                />
+                <Input
+                  type="number"
+                  placeholder="Longitude"
+                  value={manualLng}
+                  onChange={(e) => setManualLng(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  onClick={handleManualLocation}
+                  disabled={manualLocationLoading}
+                >
+                  {manualLocationLoading ? 'Setting...' : 'Set location'}
+                </Button>
+              </div>
+            )}
             {currentCity && (
-              <p className="text-sm text-muted-foreground mt-2">
-                Showing products near: <span className="font-medium">{currentCity}</span>
+              <p className="text-sm text-muted-foreground">
+                Showing retailers within {DEFAULT_NEARBY_DISTANCE_KM} km of: <span className="font-medium">{currentCity}</span>
               </p>
             )}
           </div>
         </div>
+
+        {userLocation && (
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Nearby Retailers (within {DEFAULT_NEARBY_DISTANCE_KM} km)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {nearbyRetailers.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No retailers registered within {DEFAULT_NEARBY_DISTANCE_KM} km yet. Check back soon!
+                </p>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {nearbyRetailers.map((retailer) => (
+                    <div
+                      key={retailer.id}
+                      className="rounded-lg border p-4 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold">{retailer.name || 'Retailer'}</p>
+                          <p className="text-sm text-muted-foreground">{retailer.address || 'Address not provided'}</p>
+                        </div>
+                        <span className="text-sm font-medium">{retailer.distance.toFixed(1)} km</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => {
+                          window.open(`https://www.google.com/maps/search/?api=1&query=${retailer.lat},${retailer.lng}`, '_blank');
+                        }}
+                      >
+                        <Navigation className="h-4 w-4" />
+                        Directions
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="relative flex-1">
@@ -459,15 +641,18 @@ const Products = () => {
                       <Slider
                         value={[maxDistance]}
                         onValueChange={(value) => setMaxDistance(value[0])}
-                        min={1}
-                        max={100}
-                        step={5}
+                        min={DEFAULT_NEARBY_DISTANCE_KM}
+                        max={50}
+                        step={1}
                         className="w-full"
                       />
                       <div className="flex justify-between text-sm text-muted-foreground">
-                        <span>1 km</span>
-                        <span>100 km</span>
+                        <span>{DEFAULT_NEARBY_DISTANCE_KM} km</span>
+                        <span>50 km</span>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        Default 5 km radius to highlight nearby retailers.
+                      </p>
                     </div>
                   )}
 
@@ -477,7 +662,7 @@ const Products = () => {
                       setPriceRange([minPrice, maxPrice]);
                       setQuantityRange([Math.min(minQuantity, 0), maxQuantity]);
                       setShowInStockOnly(false);
-                      setMaxDistance(50);
+                      setMaxDistance(DEFAULT_NEARBY_DISTANCE_KM);
                     }}
                     className="w-full"
                   >
