@@ -31,7 +31,8 @@ export default function Auth() {
   const [session, setSession] = useState<Session | null>(null);
   const [showOtpInput, setShowOtpInput] = useState(false);
   const [otp, setOtp] = useState("");
-  const [useOtpAuth, setUseOtpAuth] = useState(false);
+  // Default to OTP for signup (no email confirmation required)
+  const [useOtpAuth, setUseOtpAuth] = useState(!isLogin);
   const [resendCooldown, setResendCooldown] = useState(0);
 
 useEffect(() => {
@@ -193,6 +194,7 @@ useEffect(() => {
 
     setLoading(true);
     try {
+      // Remove emailRedirectTo to send OTP code instead of magic link
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
@@ -200,7 +202,7 @@ useEffect(() => {
           data: !isLogin && fullName.trim() ? {
             full_name: fullName.trim(),
           } : undefined,
-          emailRedirectTo: `${window.location.origin}/auth?role=${requestedRole}`,
+          // Removed emailRedirectTo - this makes it send OTP code instead of magic link
         },
       });
 
@@ -249,6 +251,7 @@ useEffect(() => {
         }
         
         // For signup with password, use traditional signup
+        // Note: Email confirmation must be disabled in Supabase settings for this to work
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -256,19 +259,24 @@ useEffect(() => {
             data: {
               full_name: fullName,
             },
-            emailRedirectTo: `${window.location.origin}/auth?role=${requestedRole}`,
+            // Removed emailRedirectTo to avoid magic link behavior
           },
         });
 
         if (error) throw error;
 
-        // Check if email confirmation is required
-        if (data.user && !data.session) {
-          toast.info("Please check your email for a confirmation link. After confirming, you'll be able to sign in.");
-          console.log("User created but email confirmation required:", data.user.id);
-        } else if (data.user && data.session) {
+        // If email confirmation is disabled in Supabase, user will have session immediately
+        if (data.user && data.session) {
           toast.success("Account created successfully!");
           console.log("User created with session:", data.user.id, "Role:", requestedRole);
+        } else if (data.user && !data.session) {
+          // Email confirmation still required - user needs to disable it in Supabase settings
+          toast.error("Email confirmation is still enabled. Please disable it in Supabase Dashboard → Authentication → Settings, or use OTP signup instead.", {
+            duration: 8000,
+          });
+          setUseOtpAuth(true);
+          setPassword("");
+          console.log("User created but email confirmation required:", data.user.id);
         }
       }
     } catch (error: any) {
@@ -562,19 +570,36 @@ useEffect(() => {
                   {loading ? "Loading..." : isLogin ? "Sign In" : "Create Account"}
                 </Button>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  size="lg"
-                  onClick={() => {
-                    setUseOtpAuth(true);
-                    setPassword("");
-                  }}
-                  disabled={loading}
-                >
-                  {isLogin ? "Sign in with OTP" : "Sign up with OTP"}
-                </Button>
+                {isLogin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    size="lg"
+                    onClick={() => {
+                      setUseOtpAuth(true);
+                      setPassword("");
+                    }}
+                    disabled={loading}
+                  >
+                    Sign in with OTP
+                  </Button>
+                )}
+                {!isLogin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    size="lg"
+                    onClick={() => {
+                      setUseOtpAuth(false);
+                      setPassword("");
+                    }}
+                    disabled={loading}
+                  >
+                    Sign up with Password
+                  </Button>
+                )}
               </>
             )}
 
@@ -583,7 +608,8 @@ useEffect(() => {
                 type="button"
                 onClick={() => {
                   setIsLogin(!isLogin);
-                  setUseOtpAuth(false);
+                  // Default to OTP for signup, password for login
+                  setUseOtpAuth(!isLogin);
                   setShowOtpInput(false);
                   setOtp("");
                   setPassword("");

@@ -35,11 +35,13 @@ export const DashboardHeader = ({ title, role }: DashboardHeaderProps) => {
         </div>
 
         <nav className="flex items-center gap-3">
-          {role === 'customer' && (
+          {(role === 'customer' || role === 'wholesaler') && (
             <>
-              <Button variant="ghost" asChild>
-                <Link to="/customer/orders">My Orders</Link>
-              </Button>
+              {role === 'customer' && (
+                <Button variant="ghost" asChild>
+                  <Link to="/customer/orders">My Orders</Link>
+                </Button>
+              )}
               <Button variant="ghost" asChild>
                 <Link to="/products">Browse Products</Link>
               </Button>

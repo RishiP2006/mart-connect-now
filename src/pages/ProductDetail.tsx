@@ -166,11 +166,57 @@ const ProductDetail = () => {
   };
 
   const handleAddToCart = () => {
-    if (product && quantity > 0 && quantity <= product.stock_quantity) {
-      addToCart(product, quantity);
+    if (!product) {
+      toast({
+        title: 'Error',
+        description: 'Product not found',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (quantity <= 0) {
+      toast({
+        title: 'Error',
+        description: 'Please select a quantity',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (quantity > product.stock_quantity) {
+      toast({
+        title: 'Error',
+        description: `Only ${product.stock_quantity} items available in stock`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Use wholesale price if user is a wholesaler and wholesale price exists
+      const priceToUse = userRole === 'wholesaler' && product.wholesale_price 
+        ? product.wholesale_price 
+        : product.price;
+      
+      // Create a modified product object with the correct price
+      const productWithPrice = {
+        ...product,
+        price: priceToUse,
+      };
+      
+      addToCart(productWithPrice, quantity);
+      
       toast({
         title: 'Added to cart',
-        description: `${quantity} x ${product.name}`,
+        description: `${quantity} x ${product.name}${userRole === 'wholesaler' && product.wholesale_price ? ' (Wholesale)' : ''}`,
+      });
+    } catch (error: any) {
+      console.error('Error adding to cart:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to add item to cart',
+        variant: 'destructive',
       });
     }
   };
@@ -248,7 +294,19 @@ const ProductDetail = () => {
           <div className="space-y-6">
             <div>
               <h1 className="text-4xl font-bold mb-2">{product.name}</h1>
-              <p className="text-3xl font-bold text-primary">${product.price}</p>
+              <div className="space-y-1">
+                {userRole === 'wholesaler' && product.wholesale_price ? (
+                  <>
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-3xl font-bold text-green-600">${product.wholesale_price}</p>
+                      <p className="text-xl text-muted-foreground line-through">${product.price}</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Wholesale pricing</p>
+                  </>
+                ) : (
+                  <p className="text-3xl font-bold text-primary">${product.price}</p>
+                )}
+              </div>
             </div>
 
             {product.description && (
@@ -307,7 +365,7 @@ const ProductDetail = () => {
 
                 <Button size="lg" className="w-full" onClick={handleAddToCart}>
                   <ShoppingCart className="h-5 w-5 mr-2" />
-                  Add to Cart
+                  {userRole === 'wholesaler' && product.wholesale_price ? 'Add to Cart (Wholesale)' : 'Add to Cart'}
                 </Button>
               </div>
             )}

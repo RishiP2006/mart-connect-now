@@ -14,7 +14,7 @@ export const Header = ({ userRole }: HeaderProps) => {
   const navigate = useNavigate();
   const { totalItems } = useCart();
   const canBrowseProducts = userRole !== 'retailer';
-  const canUseCart = userRole === 'customer';
+  const canUseCart = userRole === 'customer' || userRole === 'wholesaler';
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

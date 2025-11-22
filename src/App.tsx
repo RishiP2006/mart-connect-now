@@ -87,7 +87,7 @@ const App = () => (
             <Route
               path="/product/:id"
               element={
-                <RoleGuard allowedRoles={["customer"]}>
+                <RoleGuard allowedRoles={["customer", "wholesaler"]}>
                   <ProductDetail />
                 </RoleGuard>
               }
@@ -103,7 +103,7 @@ const App = () => (
             <Route
               path="/cart"
               element={
-                <RoleGuard allowedRoles={["customer"]}>
+                <RoleGuard allowedRoles={["customer", "wholesaler"]}>
                   <Cart />
                 </RoleGuard>
               }
@@ -111,7 +111,7 @@ const App = () => (
             <Route
               path="/checkout"
               element={
-                <RoleGuard allowedRoles={["customer"]}>
+                <RoleGuard allowedRoles={["customer", "wholesaler"]}>
                   <Checkout />
                 </RoleGuard>
               }
@@ -119,7 +119,7 @@ const App = () => (
             <Route
               path="/order-confirmation"
               element={
-                <RoleGuard allowedRoles={["customer"]}>
+                <RoleGuard allowedRoles={["customer", "wholesaler"]}>
                   <OrderConfirmation />
                 </RoleGuard>
               }
