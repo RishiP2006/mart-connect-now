@@ -117,7 +117,7 @@ export default function Dashboard() {
               <RoleIcon className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-bold cursor-pointer" onClick={() => navigate('/dashboard')}>Live MART</h1>
+              <h1 className="text-xl font-bold cursor-pointer" onClick={() => navigate('/dashboard')}>RURA-Mart</h1>
               <p className="text-xs text-muted-foreground capitalize">{userRole} Dashboard</p>
             </div>
           </div>

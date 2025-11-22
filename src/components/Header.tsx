@@ -29,7 +29,7 @@ export const Header = ({ userRole }: HeaderProps) => {
             className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary cursor-pointer"
             onClick={() => navigate('/dashboard')}
           >
-            Live MART
+            RURA-Mart
           </h1>
           <nav className="hidden md:flex items-center gap-6">
             {canBrowseProducts && (

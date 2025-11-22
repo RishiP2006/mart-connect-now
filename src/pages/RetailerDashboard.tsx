@@ -33,12 +33,14 @@ interface RetailerOrder {
   status: OrderStatus;
   created_at: string;
   delivery_address: string;
+  customer_id: string;
   product?: {
     name: string;
   };
   customer?: {
     full_name: string;
   };
+  customer_role?: 'customer' | 'retailer' | 'wholesaler';
 }
 
 import { DashboardHeader } from '@/components/DashboardHeader';
@@ -74,12 +76,13 @@ export default function RetailerDashboard() {
       setStats(prev => ({ ...prev, totalProducts: productsData.length }));
     }
 
-    // Fetch order stats - try with seller_id first, fallback to product-based query
+    // Fetch all orders for this retailer (from both customers and wholesalers)
     let ordersData;
     let orderError;
 
-    // Try querying with seller_id (after migration)
-    const { data: data1, error: error1 } = await supabase
+    // Query orders by seller_id - this will get orders from both customers and wholesalers
+    // First try direct query with seller_id
+    let { data: data1, error: error1 } = await supabase
       .from('orders')
       .select(`
         id,
@@ -89,17 +92,66 @@ export default function RetailerDashboard() {
         status,
         created_at,
         delivery_address,
+        seller_id,
+        customer_id,
         product:products!inner(name, seller_id),
         customer:profiles!orders_customer_id_fkey(full_name)
       `)
-      .eq('orders.seller_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(5);
+      .eq('seller_id', user.id)
+      .order('created_at', { ascending: false });
+
+    // If that fails, try without the inner join first to see if we can query orders at all
+    if (error1) {
+      console.log('Direct query failed, trying alternative query...');
+      const { data: testData, error: testError } = await supabase
+        .from('orders')
+        .select('id, seller_id, customer_id, status')
+        .eq('seller_id', user.id)
+        .limit(5);
+      
+      if (testError) {
+        console.error('Cannot query orders by seller_id:', testError);
+        // Try fallback query
+      } else {
+        console.log('Test query successful, found orders:', testData?.length || 0);
+        // Retry with full query but without inner join constraint
+        const { data: retryData, error: retryError } = await supabase
+          .from('orders')
+          .select(`
+            id,
+            quantity,
+            total_price,
+            payment_method,
+            status,
+            created_at,
+            delivery_address,
+            seller_id,
+            customer_id,
+            product:products(name, seller_id),
+            customer:profiles!orders_customer_id_fkey(full_name)
+          `)
+          .eq('seller_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (!retryError && retryData) {
+          data1 = retryData;
+          error1 = null;
+        }
+      }
+    }
+
+    // Log errors for debugging
+    if (error1) {
+      console.error('Error fetching orders by seller_id:', error1);
+      console.error('Error details:', JSON.stringify(error1, null, 2));
+    }
 
     if (!error1 && data1) {
       ordersData = data1;
+      console.log('Fetched orders by seller_id:', data1.length);
     } else {
       // Fallback: query by products seller_id if seller_id column doesn't exist on orders
+      console.log('Trying fallback query by products.seller_id');
       const { data: data2, error: error2 } = await supabase
         .from('orders')
         .select(`
@@ -110,18 +162,54 @@ export default function RetailerDashboard() {
           status,
           created_at,
           delivery_address,
+          customer_id,
+          seller_id,
           product:products!inner(name, seller_id),
           customer:profiles!orders_customer_id_fkey(full_name)
         `)
         .eq('products.seller_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
+        .order('created_at', { ascending: false });
 
       if (error2) {
-        console.error('Error fetching orders:', error2);
+        console.error('Error fetching orders (fallback):', error2);
+        console.error('Fallback error details:', JSON.stringify(error2, null, 2));
         orderError = error2;
       } else {
         ordersData = data2;
+        console.log('Fetched orders by products.seller_id:', data2?.length || 0);
+      }
+    }
+
+    // Fetch customer roles for each order to show if order is from customer or wholesaler
+    if (ordersData && ordersData.length > 0) {
+      const customerIds = [...new Set(ordersData.map(order => order.customer_id))];
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('user_id, role')
+        .in('user_id', customerIds);
+
+      // Map roles to orders
+      if (rolesData) {
+        const roleMap = new Map(rolesData.map(r => [r.user_id, r.role]));
+        ordersData.forEach(order => {
+          (order as any).customer_role = roleMap.get(order.customer_id);
+        });
+      }
+    } else {
+      console.log('No orders found for retailer:', user.id);
+      console.log('Checking if seller_id column exists...');
+      
+      // Debug: Check if we can query orders at all
+      const { data: allOrders, error: allOrdersError } = await supabase
+        .from('orders')
+        .select('id, seller_id, customer_id, status')
+        .limit(5);
+      
+      if (allOrdersError) {
+        console.error('Cannot query orders table:', allOrdersError);
+      } else {
+        console.log('Sample orders (first 5):', allOrders);
+        console.log('Current user ID:', user.id);
       }
     }
 
@@ -129,20 +217,44 @@ export default function RetailerDashboard() {
       const newOrders = ordersData.filter(order => !orderIdsRef.current.has(order.id));
       ordersData.forEach(order => orderIdsRef.current.add(order.id));
 
-      const totalRevenue = ordersData.reduce((sum, order) => sum + Number(order.total_price), 0);
-      const pendingOrders = ordersData.filter(order => order.status === 'pending').length;
+      // Calculate stats from ALL orders
+      const totalRevenue = ordersData.length > 0 
+        ? ordersData.reduce((sum, order) => sum + Number(order.total_price), 0)
+        : 0;
+      const pendingOrders = ordersData.length > 0
+        ? ordersData.filter(order => order.status === 'pending').length
+        : 0;
       setStats(prev => ({ ...prev, totalRevenue, pendingOrders }));
-      setRecentOrders(ordersData as unknown as RetailerOrder[]);
-
-      if (hasMountedRef.current && newOrders.length > 0) {
-        const first = newOrders[0] as RetailerOrder;
-        toast.info('New order received', {
-          description: `${first.customer?.full_name || 'Customer'} ordered ${first.quantity} ${first.product?.name || 'item(s)'}`
+      
+      console.log('Orders found:', ordersData.length, 'Pending:', pendingOrders);
+      
+      if (ordersData.length > 0) {
+        // Show all orders (not just 5), with pending orders first
+        const sortedOrders = [...ordersData].sort((a, b) => {
+          if (a.status === 'pending' && b.status !== 'pending') return -1;
+          if (a.status !== 'pending' && b.status === 'pending') return 1;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         });
+        setRecentOrders(sortedOrders as unknown as RetailerOrder[]);
+
+        if (hasMountedRef.current && newOrders.length > 0) {
+          const first = newOrders[0] as RetailerOrder;
+          toast.info('New order received', {
+            description: `${first.customer?.full_name || 'Customer'} ordered ${first.quantity} ${first.product?.name || 'item(s)'}`
+          });
+        }
+      } else {
+        setRecentOrders([]);
       }
       hasMountedRef.current = true;
     } else if (orderError) {
       console.error('Failed to fetch orders:', orderError);
+      setRecentOrders([]);
+      setStats(prev => ({ ...prev, totalRevenue: 0, pendingOrders: 0 }));
+    } else {
+      // No orders found and no error - set empty state
+      setRecentOrders([]);
+      setStats(prev => ({ ...prev, totalRevenue: 0, pendingOrders: 0 }));
     }
 
     setLoading(false);
@@ -338,13 +450,13 @@ export default function RetailerDashboard() {
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-bold">Latest Orders</h2>
+          <h2 className="text-2xl font-bold">All Orders</h2>
           {stats.pendingOrders > 0 && (
-            <Alert className="w-full md:w-auto">
+            <Alert className="w-full md:w-auto border-orange-200 bg-orange-50">
               <Bell className="h-4 w-4" />
               <AlertTitle>Pending Orders</AlertTitle>
               <AlertDescription>
-                You have {stats.pendingOrders} order{stats.pendingOrders === 1 ? '' : 's'} awaiting action.
+                You have {stats.pendingOrders} pending order{stats.pendingOrders === 1 ? '' : 's'} awaiting action.
               </AlertDescription>
             </Alert>
           )}
@@ -352,27 +464,49 @@ export default function RetailerDashboard() {
         {recentOrders.length === 0 ? (
           <Card>
             <CardContent className="py-10 text-center text-muted-foreground">
-              No orders yet. New orders will appear here as soon as customers buy your products.
+              No orders yet. New orders will appear here as soon as customers or wholesalers buy your products.
             </CardContent>
           </Card>
         ) : (
           <div className="grid gap-4">
-            {recentOrders.map((order) => (
-              <Card key={order.id}>
+            {recentOrders.map((order) => {
+              const isPending = order.status === 'pending';
+              const isFromWholesaler = order.customer_role === 'wholesaler';
+              return (
+              <Card key={order.id} className={isPending ? 'border-orange-300 border-2' : ''}>
                 <CardContent className="p-4 space-y-4">
                   <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Order ID</p>
-                      <p className="font-semibold">{order.id}</p>
+                    <div className="flex items-center gap-3">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Order ID</p>
+                        <p className="font-semibold text-xs">{order.id.slice(0, 8)}...</p>
+                      </div>
+                      {isPending && (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-orange-100 text-orange-700 border border-orange-300">
+                          PENDING
+                        </span>
+                      )}
+                      {isFromWholesaler && (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700 border border-blue-300">
+                          WHOLESALER
+                        </span>
+                      )}
                     </div>
-                    <span className="text-sm capitalize px-3 py-1 rounded-full bg-muted">
+                    <span className={`text-sm capitalize px-3 py-1 rounded-full ${
+                      order.status === 'pending' ? 'bg-orange-100 text-orange-700' :
+                      order.status === 'dispatched' ? 'bg-blue-100 text-blue-700' :
+                      order.status === 'on_the_way' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-green-100 text-green-700'
+                    }`}>
                       {order.status.replace(/_/g, ' ')}
                     </span>
                   </div>
                   <OrderStatusTracker status={order.status} />
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div>
-                      <p className="text-xs uppercase text-muted-foreground">Customer</p>
+                      <p className="text-xs uppercase text-muted-foreground">
+                        {isFromWholesaler ? 'Wholesaler' : 'Customer'}
+                      </p>
                       <p className="font-medium">{order.customer?.full_name || 'Customer'}</p>
                     </div>
                     <div>
@@ -433,7 +567,8 @@ export default function RetailerDashboard() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            );
+            })}
           </div>
         )}
       </section>

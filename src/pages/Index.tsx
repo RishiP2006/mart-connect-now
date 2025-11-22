@@ -46,7 +46,7 @@ const Index = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
+    <div className="min-h-screen bg-gradient-to-br from-primary/8 via-background to-secondary/8">
       {/* Hero Section */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 opacity-30">
@@ -60,7 +60,7 @@ const Index = () => {
             </div>
             
             <h1 className="text-5xl md:text-7xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary via-primary to-secondary">
-              Welcome to Live MART
+              Welcome to RURA-Mart
             </h1>
             
             <p className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto">
@@ -90,7 +90,7 @@ const Index = () => {
         <div className="text-center mb-12">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Choose Your Role</h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Select how you want to use Live MART and start your journey
+            Select how you want to use RURA-Mart and start your journey
           </p>
         </div>
 
@@ -103,9 +103,9 @@ const Index = () => {
 
       {/* Features Section */}
       <section className="container mx-auto px-4 py-16">
-        <div className="bg-gradient-to-r from-primary/10 via-secondary/10 to-accent/10 rounded-3xl p-8 md:p-12">
+        <div className="bg-gradient-to-r from-primary/12 via-secondary/12 to-accent/12 rounded-3xl p-8 md:p-12 border border-primary/20 shadow-lg">
           <div className="text-center max-w-3xl mx-auto space-y-6">
-            <h2 className="text-3xl md:text-4xl font-bold">Why Choose Live MART?</h2>
+            <h2 className="text-3xl md:text-4xl font-bold">Why Choose RURA-Mart?</h2>
             <div className="grid md:grid-cols-3 gap-6 text-left">
               <div className="space-y-2">
                 <div className="text-4xl">🎯</div>
@@ -136,7 +136,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="border-t mt-16">
         <div className="container mx-auto px-4 py-8 text-center text-sm text-muted-foreground">
-          <p>© 2025 Live MART. Connecting local commerce.</p>
+          <p>© 2025 RURA-Mart. Connecting local commerce.</p>
         </div>
       </footer>
     </div>

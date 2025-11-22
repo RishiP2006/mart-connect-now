@@ -21,6 +21,7 @@ const Checkout = () => {
   const { items, totalPrice, clearCart } = useCart();
   const [loading, setLoading] = useState(false);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [productStock, setProductStock] = useState<Record<string, { stock: number; name: string }>>({});
   const [formData, setFormData] = useState({
     delivery_address: '',
     payment_method: 'offline',
@@ -33,7 +34,29 @@ const Checkout = () => {
       navigate('/cart');
     }
     fetchUserRole();
+    fetchProductStock();
   }, [items]);
+
+  const fetchProductStock = async () => {
+    if (items.length === 0) return;
+    
+    const productIds = items.map(item => item.product_id);
+    const { data: products } = await supabase
+      .from('products')
+      .select('id, name, stock_quantity')
+      .in('id', productIds);
+
+    if (products) {
+      const stockMap: Record<string, { stock: number; name: string }> = {};
+      products.forEach(product => {
+        stockMap[product.id] = {
+          stock: product.stock_quantity,
+          name: product.name,
+        };
+      });
+      setProductStock(stockMap);
+    }
+  };
 
   const fetchUserRole = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -63,7 +86,53 @@ const Checkout = () => {
         return;
       }
 
-      // Create orders for each item and update stock
+      // STEP 1: Validate stock availability BEFORE creating orders
+      const stockValidationErrors: string[] = [];
+      const productsToUpdate: Array<{ id: string; currentStock: number; requestedQuantity: number }> = [];
+
+      for (const item of items) {
+        const { data: product, error: productError } = await supabase
+          .from('products')
+          .select('id, name, stock_quantity, seller_id')
+          .eq('id', item.product_id)
+          .single();
+
+        if (productError || !product) {
+          stockValidationErrors.push(`${item.product_name}: Product not found`);
+          continue;
+        }
+
+        if (product.stock_quantity < item.quantity) {
+          stockValidationErrors.push(
+            `${item.product_name}: Only ${product.stock_quantity} available, but ${item.quantity} requested`
+          );
+          continue;
+        }
+
+        if (product.stock_quantity === 0) {
+          stockValidationErrors.push(`${item.product_name}: Out of stock`);
+          continue;
+        }
+
+        productsToUpdate.push({
+          id: item.product_id,
+          currentStock: product.stock_quantity,
+          requestedQuantity: item.quantity,
+        });
+      }
+
+      // If any items are out of stock, show error and stop
+      if (stockValidationErrors.length > 0) {
+        toast({
+          title: 'Out of Stock',
+          description: stockValidationErrors.join('. '),
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      // STEP 2: Create orders (only if all stock is available)
       const orders = items.map((item) => ({
         customer_id: session.user.id,
         product_id: item.product_id,
@@ -78,29 +147,31 @@ const Checkout = () => {
       // Insert orders
       const { data: insertedOrders, error: orderError } = await supabase.from('orders').insert(orders).select();
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        console.error('Error creating orders:', orderError);
+        throw orderError;
+      }
 
       // Get the first order ID for email (if multiple orders, use the first one)
       const orderId = insertedOrders?.[0]?.id || undefined;
 
-      // Update stock for each product
-      for (const item of items) {
-        const { data: product } = await supabase
+      // STEP 3: Update stock for each product (only if orders were created successfully)
+      for (const productUpdate of productsToUpdate) {
+        const newStock = productUpdate.currentStock - productUpdate.requestedQuantity;
+        const { error: stockError } = await supabase
           .from('products')
-          .select('stock_quantity')
-          .eq('id', item.product_id)
-          .single();
+          .update({ stock_quantity: newStock })
+          .eq('id', productUpdate.id)
+          .eq('stock_quantity', productUpdate.currentStock); // Optimistic locking to prevent race conditions
 
-        if (product) {
-          const newStock = Math.max(0, product.stock_quantity - item.quantity);
-          const { error: stockError } = await supabase
-            .from('products')
-            .update({ stock_quantity: newStock })
-            .eq('id', item.product_id);
-
-          if (stockError) {
-            console.error('Error updating stock for product:', item.product_id, stockError);
-          }
+        if (stockError) {
+          console.error('Error updating stock for product:', productUpdate.id, stockError);
+          // If stock update fails, we should ideally rollback orders, but for now just log
+          toast({
+            title: 'Warning',
+            description: `Stock update failed for one or more products. Please contact support.`,
+            variant: 'destructive',
+          });
         }
       }
 
@@ -258,16 +329,42 @@ const Checkout = () => {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  {items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <span>
-                        {item.product_name} x {item.quantity}
-                      </span>
-                      <span className="font-semibold">
-                        ${(item.product_price * item.quantity).toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
+                  {items.map((item) => {
+                    const stockInfo = productStock[item.product_id];
+                    const isOutOfStock = stockInfo && stockInfo.stock === 0;
+                    const isLowStock = stockInfo && stockInfo.stock > 0 && stockInfo.stock < item.quantity;
+                    const isInStock = stockInfo && stockInfo.stock >= item.quantity;
+                    
+                    return (
+                      <div key={item.id} className="flex justify-between items-start text-sm border-b pb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span>
+                              {item.product_name} x {item.quantity}
+                            </span>
+                            {isOutOfStock && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">
+                                Out of Stock
+                              </span>
+                            )}
+                            {isLowStock && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold">
+                                Only {stockInfo.stock} available
+                              </span>
+                            )}
+                            {isInStock && stockInfo && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                                {stockInfo.stock} in stock
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="font-semibold ml-2">
+                          ${(item.product_price * item.quantity).toFixed(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="border-t pt-4 space-y-2">

@@ -239,7 +239,7 @@ export default function CustomerDashboard() {
       <DashboardHeader title="Customer Dashboard" role="customer" />
       <main className="container mx-auto p-6 space-y-8">
       <header>
-        <h1 className="text-3xl font-bold mb-2">Welcome to Live MART</h1>
+        <h1 className="text-3xl font-bold mb-2">Welcome to RURA-Mart</h1>
         <p className="text-muted-foreground">Discover products from local retailers and wholesalers</p>
       </header>
 

@@ -194,7 +194,8 @@ useEffect(() => {
 
     setLoading(true);
     try {
-      // Remove emailRedirectTo to send OTP code instead of magic link
+      // Explicitly request OTP code (not magic link) by omitting emailRedirectTo
+      // Make sure Supabase email template is set to "OTP" not "Magic Link" in Dashboard
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
@@ -202,7 +203,9 @@ useEffect(() => {
           data: !isLogin && fullName.trim() ? {
             full_name: fullName.trim(),
           } : undefined,
-          // Removed emailRedirectTo - this makes it send OTP code instead of magic link
+          // DO NOT include emailRedirectTo - this ensures OTP code is sent instead of magic link
+          // If you're still getting magic links, check Supabase Dashboard:
+          // Authentication → Email Templates → Magic Link template (should be disabled or use OTP template)
         },
       });
 
@@ -386,7 +389,7 @@ useEffect(() => {
           <CardDescription className="text-base">
             {isLogin 
               ? `Sign in to your ${getRoleDisplay()} account` 
-              : `Join Live MART as a ${getRoleDisplay()}`
+              : `Join RURA-Mart as a ${getRoleDisplay()}`
             }
           </CardDescription>
         </CardHeader>

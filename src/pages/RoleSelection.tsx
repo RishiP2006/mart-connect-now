@@ -35,7 +35,7 @@ export default function RoleSelection() {
     <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/5 via-background to-secondary/5 p-6">
       <div className="w-full max-w-5xl space-y-8">
         <header className="text-center space-y-3">
-          <h1 className="text-4xl font-bold">Welcome to Live MART</h1>
+          <h1 className="text-4xl font-bold">Welcome to RURA-Mart</h1>
           <p className="text-xl text-muted-foreground">Choose how you'd like to get started</p>
         </header>
 

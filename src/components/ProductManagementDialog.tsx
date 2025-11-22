@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
@@ -35,8 +36,35 @@ export const ProductManagementDialog = ({
     wholesale_price: product?.wholesale_price || 0,
     stock_quantity: product?.stock_quantity || 0,
     image_url: product?.image_url || '',
+    category_id: '',
   });
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetchCategories();
+    if (product) {
+      // Fetch product with category to get category_id
+      supabase
+        .from('products')
+        .select('category_id')
+        .eq('id', product.id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setFormData(prev => ({ ...prev, category_id: data.category_id || '' }));
+          }
+        });
+    }
+  }, [product]);
+
+  const fetchCategories = async () => {
+    const { data } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name');
+    setCategories(data || []);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +82,10 @@ export const ProductManagementDialog = ({
         // Update existing product
         const { error } = await supabase
           .from('products')
-          .update(formData)
+          .update({
+            ...formData,
+            category_id: formData.category_id || null,
+          })
           .eq('id', product.id);
 
         if (error) throw error;
@@ -63,7 +94,11 @@ export const ProductManagementDialog = ({
         // Create new product
         const { error } = await supabase
           .from('products')
-          .insert([{ ...formData, seller_id: user.id }]);
+          .insert([{ 
+            ...formData, 
+            seller_id: user.id,
+            category_id: formData.category_id || null,
+          }]);
 
         if (error) throw error;
         toast.success('Product created successfully');
@@ -78,6 +113,7 @@ export const ProductManagementDialog = ({
         wholesale_price: 0,
         stock_quantity: 0,
         image_url: '',
+        category_id: '',
       });
     } catch (error: any) {
       toast.error(error.message || 'Failed to save product');
@@ -111,6 +147,26 @@ export const ProductManagementDialog = ({
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={4}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="category">Category</Label>
+            <Select
+              value={formData.category_id}
+              onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+            >
+              <SelectTrigger id="category">
+                <SelectValue placeholder="Select a category (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.icon} {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

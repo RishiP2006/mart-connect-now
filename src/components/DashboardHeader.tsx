@@ -29,7 +29,7 @@ export const DashboardHeader = ({ title, role }: DashboardHeaderProps) => {
         <div className="flex items-center gap-6">
           <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <Home className="h-5 w-5" />
-            <span className="font-bold text-lg">Live MART</span>
+            <span className="font-bold text-lg">RURA-Mart</span>
           </Link>
           <span className="text-sm text-muted-foreground">| {title}</span>
         </div>

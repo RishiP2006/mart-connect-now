@@ -75,7 +75,7 @@ export default function ShopifyProductDetail() {
           setProduct(p);
           setError(null);
           const url = window.location.origin + `/shopify/${handle}`;
-          updateHeadTags(`${p.title} | Live MART`, p.description || p.title, url, p);
+          updateHeadTags(`${p.title} | RURA-Mart`, p.description || p.title, url, p);
         }
       } catch (e: any) {
         setError(e.message || 'Failed to load product');
