@@ -92,18 +92,23 @@ useEffect(() => {
       }
 
       const normalizedRole = requestedRole as any;
+      console.log("Attempting to assign role:", normalizedRole, "for user:", session.user.id);
 
-      const { error: roleError } = await supabase
+      const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
-        .insert({ user_id: session.user.id, role: normalizedRole });
+        .insert({ user_id: session.user.id, role: normalizedRole })
+        .select();
 
       if (roleError) {
         console.error("Role assignment error:", roleError);
+        console.error("Error details:", JSON.stringify(roleError, null, 2));
         toast.error(`Failed to assign ${requestedRole} role: ${roleError.message}`);
         await supabase.auth.signOut();
         setSession(null);
         return;
       }
+
+      console.log("Role assigned successfully:", roleData);
 
       const { data: existingProfile } = await supabase
         .from("profiles")
@@ -259,9 +264,11 @@ useEffect(() => {
 
         // Check if email confirmation is required
         if (data.user && !data.session) {
-          toast.info("Please check your email for a confirmation link");
+          toast.info("Please check your email for a confirmation link. After confirming, you'll be able to sign in.");
+          console.log("User created but email confirmation required:", data.user.id);
         } else if (data.user && data.session) {
           toast.success("Account created successfully!");
+          console.log("User created with session:", data.user.id, "Role:", requestedRole);
         }
       }
     } catch (error: any) {
@@ -300,14 +307,19 @@ useEffect(() => {
 
         if (!existingRole) {
           // Insert role for the new user
-          const { error: roleError } = await supabase
+          console.log("OTP verification: Assigning role:", requestedRole, "for user:", data.user.id);
+          const { data: roleData, error: roleError } = await supabase
             .from("user_roles")
-            .insert({ user_id: data.user.id, role: requestedRole as any });
+            .insert({ user_id: data.user.id, role: requestedRole as any })
+            .select();
 
           if (roleError) {
-            console.error("Role assignment error:", roleError);
+            console.error("OTP Role assignment error:", roleError);
+            console.error("Error details:", JSON.stringify(roleError, null, 2));
             toast.error(`Failed to assign ${requestedRole} role: ${roleError.message}`);
             // Don't return, continue to create profile
+          } else {
+            console.log("OTP Role assigned successfully:", roleData);
           }
 
           // Create profile if it doesn't exist
